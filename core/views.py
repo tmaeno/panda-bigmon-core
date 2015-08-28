@@ -5548,8 +5548,189 @@ def generateGroupsToTrocess():
         new_cur.execute(querystr)
         mrecs = dictfetchall(new_cur)
         for rec in mrecs:
+            request = composeRequest(rec)
             print rec
 # Here, for each group make JSON generation
+
+def composeRequest(rec):
+    pass
+
+def errorSummaryPreprocess(request):
+    valid, response = initRequest(request)
+    if not valid: return response
+
+    testjobs = False
+    if 'prodsourcelabel' in request.session['requestParams'] and request.session['requestParams']['prodsourcelabel'].lower().find('test') >= 0:
+        testjobs = True
+
+    jobtype = ''
+    if 'jobtype' in request.session['requestParams']:
+        jobtype = request.session['requestParams']['jobtype']
+    elif '/analysis' in request.path:
+        jobtype = 'analysis'
+    elif '/production' in request.path:
+        jobtype = 'production'
+    elif testjobs:
+        jobtype = 'rc_test'
+
+    if jobtype == '':
+        hours = 3
+        limit = 6000
+    elif jobtype.startswith('anal'):
+        hours = 6
+        limit = 6000
+    else:
+        hours = 12
+        limit = 6000
+
+    if 'hours' in request.session['requestParams']:
+        hours = int(request.session['requestParams']['hours'])
+
+    query,wildCardExtension  = setupView(request, hours=hours, limit=limit, wildCardExt=True)
+
+    if not testjobs: query['jobstatus__in'] = [ 'failed', 'holding' ]
+    jobs = []
+    values = 'produsername', 'pandaid', 'cloud','computingsite','cpuconsumptiontime','jobstatus','transformation','prodsourcelabel','specialhandling','vo','modificationtime', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'currentpriority', 'computingelement'
+    print "step3-1"
+    print str(datetime.now())
+
+    if testjobs:
+        jobs.extend(Jobsdefined4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+        jobs.extend(Jobswaiting4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+
+    jobs.extend(Jobsactive4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+    jobs.extend(Jobsarchived4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+
+    if (((datetime.now() - datetime.strptime(query['modificationtime__range'][0], "%Y-%m-%d %H:%M:%S" )).days > 1) or \
+        ((datetime.now() - datetime.strptime(query['modificationtime__range'][1], "%Y-%m-%d %H:%M:%S" )).days > 1)):
+        jobs.extend(Jobsarchived.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+
+    print "step3-1-0"
+    print str(datetime.now())
+
+
+    jobs = cleanJobList(request, jobs, mode='nodrop', doAddMeta = False)
+
+
+    njobs = len(jobs)
+    tasknamedict = taskNameDict(jobs)
+
+    print "step3-1-1"
+    print str(datetime.now())
+
+
+    ## Build the error summary.
+    errsByCount, errsBySite, errsByUser, errsByTask, sumd, errHist = errorSummaryDict(request,jobs, tasknamedict, testjobs)
+    ## Build the state summary and add state info to site error summary
+    #notime = True
+    #if testjobs: notime = False
+    notime = False #### behave as it used to before introducing notime for dashboards. Pull only 12hrs.
+    statesummary = dashSummary(request, hours, limit=limit, view=jobtype, cloudview='region', notime=notime)
+    sitestates = {}
+    savestates = [ 'finished', 'failed', 'cancelled', 'holding', ]
+    for cloud in statesummary:
+        for site in cloud['sites']:
+            sitename = cloud['sites'][site]['name']
+            sitestates[sitename] = {}
+            for s in savestates:
+                sitestates[sitename][s] = cloud['sites'][site]['states'][s]['count']
+            sitestates[sitename]['pctfail'] = cloud['sites'][site]['pctfail']
+
+    for site in errsBySite:
+        sitename = site['name']
+        if sitename in sitestates:
+            for s in savestates:
+                if s in sitestates[sitename]: site[s] = sitestates[sitename][s]
+            if 'pctfail' in sitestates[sitename]: site['pctfail'] = sitestates[sitename]['pctfail']
+
+    taskname = ''
+    if not testjobs:
+        ## Build the task state summary and add task state info to task error summary
+        print "step3-1-2"
+        print str(datetime.now())
+        taskstatesummary = dashTaskSummary(request, hours, limit=limit, view=jobtype)
+        print "step3-2"
+        print str(datetime.now())
+
+        taskstates = {}
+        for task in taskstatesummary:
+            taskid = task['taskid']
+            taskstates[taskid] = {}
+            for s in savestates:
+                taskstates[taskid][s] = task['states'][s]['count']
+            if 'pctfail' in task: taskstates[taskid]['pctfail'] = task['pctfail']
+        for task in errsByTask:
+            taskid = task['name']
+            if taskid in taskstates:
+                for s in savestates:
+                    if s in taskstates[taskid]: task[s] = taskstates[taskid][s]
+                if 'pctfail' in taskstates[taskid]: task['pctfail'] = taskstates[taskid]['pctfail']
+        if 'jeditaskid' in request.session['requestParams']:
+            taskname = getTaskName('jeditaskid',request.session['requestParams']['jeditaskid'])
+
+
+    if 'sortby' in request.session['requestParams']:
+        sortby = request.session['requestParams']['sortby']
+    else:
+        sortby = 'alpha'
+    flowstruct = buildGoogleFlowDiagram(request, jobs=jobs)
+
+    print "step3-3"
+    print str(datetime.now())
+
+
+    request.session['max_age_minutes'] = 6
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
+        nosorturl = removeParam(request.get_full_path(), 'sortby')
+        xurl = extensibleURL(request)
+        jobsurl = xurl.replace('/errors/','/jobs/')
+
+        TFIRST = request.session['TFIRST']
+        TLAST = request.session['TLAST']
+        del request.session['TFIRST']
+        del request.session['TLAST']
+
+        data = {
+            'prefix': getPrefix(request),
+            'request' : request,
+            'viewParams' : request.session['viewParams'],
+            'requestParams' : request.session['requestParams'],
+            'requestString' : request.META['QUERY_STRING'],
+            'jobtype' : jobtype,
+            'njobs' : njobs,
+            'hours' : LAST_N_HOURS_MAX,
+            'limit' : request.session['JOB_LIMIT'],
+            'user' : None,
+            'xurl' : xurl,
+            'jobsurl' : jobsurl,
+            'nosorturl' : nosorturl,
+            'errsByCount' : errsByCount,
+            'errsBySite' : errsBySite,
+            'errsByUser' : errsByUser,
+            'errsByTask' : errsByTask,
+            'sumd' : sumd,
+            'errHist' : errHist,
+            'tfirst' : TFIRST,
+            'tlast' : TLAST,
+            'sortby' : sortby,
+            'taskname' : taskname,
+            'flowstruct' : flowstruct,
+        }
+        data.update(getContextVariables(request))
+        ##self monitor
+        endSelfMonitor(request)
+        response = render_to_response('errorSummary.html', data, RequestContext(request))
+        patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
+        return response
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
+        del request.session['TFIRST']
+        del request.session['TLAST']
+        resp = []
+        for job in jobs:
+            resp.append({ 'pandaid': job.pandaid, 'status': job.jobstatus, 'prodsourcelabel': job.prodsourcelabel, 'produserid' : job.produserid})
+        return  HttpResponse(json.dumps(resp), mimetype='text/html')
+
+
 
 
 
