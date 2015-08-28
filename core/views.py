@@ -25,7 +25,8 @@ from django.db import connection, transaction
 
 from core.common.utils import getPrefix, getContextVariables, QuerySetChain
 from core.settings import STATIC_URL, FILTER_UI_ENV, defaultDatetimeFormat
-from core.pandajob.models import PandaJob, Jobsactive4, Jobsdefined4, Jobswaiting4, Jobsarchived4, Jobsarchived, GetRWWithPrioJedi3DAYS
+from core.pandajob.models import PandaJob, Jobsactive4, Jobsdefined4, Jobswaiting4, Jobsarchived4, Jobsarchived, \
+        GetRWWithPrioJedi3DAYS, PreprocessGroupTypes, PreprocessGroups, PreprocessKeys
 from resource.models import Schedconfig
 from core.common.models import Filestable4
 from core.common.models import Datasets
@@ -3051,125 +3052,6 @@ def dashTaskSummary(request, hours, limit=999999, view='all'):
     return fullsummary
 
 
-def preProcess(request):
-
-    ''' todo:
-    0. Decide tables structure and parameters aggregates approach
-    1. Get List of Jobs modified later than previosly saved last modified job
-    2. For each of them calculate output variables of Error summary.
-    Factorize using set of request parameters causing different flow.
-    3. Save new variables in the dedicated table in form - jobid ~ variable
-    4. When a new query comes, select from job tables correspondent ids.
-    5. Select variables from the transistent table.
-    6. Merge them and display output.
-
-    '''
-
-
-#    data = {}
-#    dashTaskSummary_preprocess(request)
-#    response = render_to_response('preprocessLog.html', data, RequestContext(request))
-#    patch_response_headers(response, cache_timeout=-1)
-
-    return None
-
-
-#class prepDashTaskSummary:
-
-
-
-
-
-
-def dashTaskSummary_preprocess(request):
-#    query = setupView(request,hours=hours,limit=limit,opmode=view)
-    query = { 'modificationtime__range' : [timezone.now() - timedelta(hours=LAST_N_HOURS_MAX), timezone.now()] }
-
-    tasksummarydata = []
-    querynotime = query
-    del querynotime['modificationtime__range']
-    tasksummarydata.extend(Jobsactive4.objects.filter(**querynotime).values('taskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
-    tasksummarydata.extend(Jobsdefined4.objects.filter(**querynotime).values('taskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
-    tasksummarydata.extend(Jobswaiting4.objects.filter(**querynotime).values('taskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'),  Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
-    tasksummarydata.extend(Jobsarchived4.objects.filter(**query).values('taskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
-    tasksummarydata.extend(Jobsactive4.objects.filter(**querynotime).values('jeditaskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('jeditaskid','jobstatus')[:request.session['JOB_LIMIT']])
-    tasksummarydata.extend(Jobsdefined4.objects.filter(**querynotime).values('jeditaskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('jeditaskid','jobstatus')[:request.session['JOB_LIMIT']])
-    tasksummarydata.extend(Jobswaiting4.objects.filter(**querynotime).values('jeditaskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('jeditaskid','jobstatus')[:request.session['JOB_LIMIT']])
-    tasksummarydata.extend(Jobsarchived4.objects.filter(**query).values('jeditaskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('jeditaskid','jobstatus')[:request.session['JOB_LIMIT']])
-
-
-    '''
-    tasks = {}
-    totstates = {}
-    totjobs = 0
-    for state in sitestatelist:
-        totstates[state] = 0
-
-    taskids = []
-    for rec in tasksummarydata:
-        if 'jeditaskid' in rec and rec['jeditaskid'] and rec['jeditaskid'] > 0:
-            taskids.append( { 'jeditaskid' : rec['jeditaskid'] } )
-        elif 'taskid' in rec and rec['taskid'] and rec['taskid'] > 0 :
-            taskids.append( { 'taskid' : rec['taskid'] } )
-    tasknamedict = taskNameDict(taskids)
-    for rec in tasksummarydata:
-        if 'jeditaskid' in rec and rec['jeditaskid'] and rec['jeditaskid'] > 0:
-            taskid = rec['jeditaskid']
-            tasktype = 'JEDI'
-        elif 'taskid' in rec and rec['taskid'] and rec['taskid'] > 0 :
-            taskid = rec['taskid']
-            tasktype = 'old'
-        else:
-            continue
-        jobstatus = rec['jobstatus']
-        count = rec['jobstatus__count']
-        if jobstatus not in sitestatelist: continue
-        totjobs += count
-        totstates[jobstatus] += count
-        if taskid not in tasks:
-            tasks[taskid] = {}
-            tasks[taskid]['taskid'] = taskid
-            if taskid in tasknamedict:
-                tasks[taskid]['name'] = tasknamedict[taskid]
-            else:
-                tasks[taskid]['name'] = str(taskid)
-            tasks[taskid]['count'] = 0
-            tasks[taskid]['states'] = {}
-            tasks[taskid]['statelist'] = []
-            for state in sitestatelist:
-                tasks[taskid]['states'][state] = {}
-                tasks[taskid]['states'][state]['name'] = state
-                tasks[taskid]['states'][state]['count'] = 0
-        tasks[taskid]['count'] += count
-        tasks[taskid]['states'][jobstatus]['count'] += count
-    if view == 'analysis':
-        ## Show only tasks starting with 'user.'
-        kys = tasks.keys()
-        for t in kys:
-            if not str(tasks[t]['name'].encode('ascii','ignore')).startswith('user.'): del tasks[t]
-    ## Convert dict to summary list
-    taskkeys = tasks.keys()
-    taskkeys.sort()
-    fullsummary = []
-    for taskid in taskkeys:
-        for state in sitestatelist:
-            tasks[taskid]['statelist'].append(tasks[taskid]['states'][state])
-        if tasks[taskid]['states']['finished']['count'] + tasks[taskid]['states']['failed']['count'] > 0:
-            tasks[taskid]['pctfail'] =  int(100.*float(tasks[taskid]['states']['failed']['count'])/(tasks[taskid]['states']['finished']['count']+tasks[taskid]['states']['failed']['count']))
-
-        fullsummary.append(tasks[taskid])
-    if 'sortby' in request.session['requestParams']:
-        if request.session['requestParams']['sortby'] in sitestatelist:
-            fullsummary = sorted(fullsummary, key=lambda x:x['states'][request.session['requestParams']['sortby']],reverse=True)
-        elif request.session['requestParams']['sortby'] == 'pctfail':
-            fullsummary = sorted(fullsummary, key=lambda x:x['pctfail'],reverse=True)
-    '''
-
-    return -1
-
-
-
-
 
 #https://github.com/PanDAWMS/panda-jedi/blob/master/pandajedi/jedicore/JediCoreUtils.py
 def getEffectiveFileSize(fsize,startEvent,endEvent,nEvents):
@@ -5552,3 +5434,124 @@ def endSelfMonitor(request):
             description=' '
     )
     reqs.save()
+
+
+
+
+
+def preProcess(request):
+
+    ''' todo:
+    0. Decide tables structure and parameters aggregates approach
+    1. Get List of Jobs modified later than previosly saved last modified job
+    2. For each of them calculate output variables of Error summary.
+    Factorize using set of request parameters causing different flow.
+    3. Save new variables in the dedicated table in form - jobid ~ variable
+    4. When a new query comes, select from job tables correspondent ids.
+    5. Select variables from the transistent table.
+    6. Merge them and display output.
+
+
+
+SELECT JEDITASKID FROM ATLAS_PANDA.JOBSARCHIVED4 t1 WHERE t1.MODIFICATIONTIME >= TO_DATE('2015-08-15', 'YYYY-MM-DD')
+UNION
+SELECT JEDITASKID FROM ATLAS_PANDA.JOBSDEFINED4 t1 WHERE t1.MODIFICATIONTIME >= TO_DATE('2015-08-15', 'YYYY-MM-DD')
+UNION
+SELECT JEDITASKID FROM ATLAS_PANDA.Jobswaiting4 t1 WHERE t1.MODIFICATIONTIME >= TO_DATE('2015-08-15', 'YYYY-MM-DD')
+UNION
+SELECT JEDITASKID FROM ATLAS_PANDA.Jobsactive4 t1 WHERE t1.MODIFICATIONTIME >= TO_DATE('2015-08-15', 'YYYY-MM-DD')
+UNION
+SELECT JEDITASKID FROM ATLAS_PANDAARCH.Jobsarchived t1 WHERE t1.MODIFICATIONTIME >= TO_DATE('2015-08-15', 'YYYY-MM-DD')
+group by JEDITASKID
+
+()
+
+Then For each JEDITASKID do like errorSummary(request):
+
+Save result
+
+
+    '''
+
+
+
+
+
+    #fillPreprocessGroupTypes()
+
+    data = {}
+#    dashTaskSummary_preprocess(request)
+    generateGroupsToTrocess()
+    response = render_to_response('preprocessLog.html', data, RequestContext(request))
+    patch_response_headers(response, cache_timeout=-1)
+
+    return response
+
+
+#class prepDashTaskSummary:
+
+
+
+def fillPreprocessGroupTypes():
+
+    sets = ['JEDITASKID,TASKID', 'JEDITASKID,TASKID,PILOTERRORCODE']
+
+    for set in sets:
+        grouptypeid = PreprocessGroupTypes.objects.count()
+        fields = set
+        page = '/errors/'
+        newRow = PreprocessGroupTypes(grouptypeid=grouptypeid, fields=fields, page=page)
+        newRow.save()
+
+def generateGroupPreprocessQuery(fields, enddate):
+
+    queryString = ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
+    queryString += ", ".join(fields)
+    queryString += ' from ATLAS_PANDAARCH.JOBSARCHIVED t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
+    queryString += ' UNION'
+    queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
+    queryString += ", ".join(fields)
+    queryString += ' from ATLAS_PANDA.JOBSARCHIVED4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
+    queryString += ' UNION'
+    queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
+    queryString += ", ".join(fields)
+    queryString += ' from ATLAS_PANDA.Jobsactive4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
+    queryString += ' UNION'
+    queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
+    queryString += ", ".join(fields)
+    queryString += ' from ATLAS_PANDA.Jobsdefined4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
+    queryString += ' UNION'
+    queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
+    queryString += ", ".join(fields)
+    queryString += ' from ATLAS_PANDA.Jobswaiting4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
+    return queryString
+
+
+
+def generateGroupsToTrocess():
+
+    groupTypes = PreprocessGroupTypes.objects.all()
+    lastGroupBuildTime = cache.get('voms-users-list')
+    if (lastGroupBuildTime is None) or (len(lastGroupBuildTime) == 0):
+        lastGroupBuildTime = timezone.now() - timedelta(hours=2) #in production replace by 14*24
+
+    for groupType in groupTypes:
+        enddate = timezone.now().strftime(defaultDatetimeFormat)
+        fields = groupType.fields.split(',')
+        querystr = generateGroupPreprocessQuery(fields, enddate)
+        new_cur = connection.cursor()
+        new_cur.execute(querystr)
+        mrecs = dictfetchall(new_cur)
+        for rec in mrecs:
+            print rec
+# Here, for each group make JSON generation
+
+
+
+
+

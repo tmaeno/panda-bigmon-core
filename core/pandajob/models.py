@@ -95,6 +95,41 @@ class GetRWWithPrioJedi3DAYS(models.Model):
 
 
 
+
+class PreprocessGroupTypes(models.Model):
+    grouptypeid = models.BigIntegerField(primary_key=True, db_column='GROUPTYPEID')
+    fields = models.CharField(max_length=200, db_column='FIELDS', blank=True)
+    page = models.CharField(max_length=20, db_column='PAGE', blank=True)
+    class Meta:
+        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_GROUPTYPES"'
+
+class PreprocessGroups(models.Model):
+    groupid = models.BigIntegerField(primary_key=True, db_column='GROUPID')
+    grouptypeid = models.ForeignKey(PreprocessGroupTypes)
+    timelowerbound = models.DateTimeField(null=True, db_column="TIMELOWERBOUND")
+    timeupperbound = models.DateTimeField(null=True, db_column="TIMEUPPERBOUND")
+    lasttimeupdated = models.DateTimeField(null=True, db_column="LASTTIMEUPDATED")
+    jsondata = models.TextField(blank=True, db_column="LASTTIMEUPDATED")
+
+    class Meta:
+        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_GROUPS"'
+
+class PreprocessKeys(models.Model):
+    groupid = models.ForeignKey(PreprocessGroups)
+    fieldname = models.CharField(max_length=20, db_column='FIELDNAME', blank=True)
+    fieldvalue = models.CharField(max_length=20, db_column='FIELDVALUE', blank=True)
+    class Meta:
+        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_KEYS"'
+
+
+class PreprocessJobs(models.Model):
+    groupid = models.ForeignKey(PreprocessGroups)
+    pandaid = models.BigIntegerField(db_column='PANDAID')
+    class Meta:
+        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_JOBS"'
+
+
+
 class PandaJob(models.Model):
     pandaid = models.BigIntegerField(primary_key=True, db_column='PANDAID') # Field name made lowercase.
     jobdefinitionid = models.BigIntegerField(db_column='JOBDEFINITIONID') # Field name made lowercase.
