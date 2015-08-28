@@ -5494,7 +5494,7 @@ Save result
 
 def fillPreprocessGroupTypes():
 
-    sets = ['JEDITASKID,TASKID', 'JEDITASKID,TASKID,PILOTERRORCODE']
+    sets = ['JEDITASKID,TASKID,PRODSOURCELABEL', 'JEDITASKID,TASKID,PILOTERRORCODE']
 
     for set in sets:
         grouptypeid = PreprocessGroupTypes.objects.count()
@@ -5536,7 +5536,7 @@ def generateGroupPreprocessQuery(fields, enddate):
 def generateGroupsToTrocess():
 
     groupTypes = PreprocessGroupTypes.objects.all()
-    lastGroupBuildTime = cache.get('voms-users-list')
+    lastGroupBuildTime = cache.get('lastpreproccesstime')
     if (lastGroupBuildTime is None) or (len(lastGroupBuildTime) == 0):
         lastGroupBuildTime = timezone.now() - timedelta(hours=2) #in production replace by 14*24
 
@@ -5553,6 +5553,8 @@ def generateGroupsToTrocess():
 # Here, for each group make JSON generation
 
 def composeRequest(rec):
+
+
     pass
 
 def errorSummaryPreprocess(request):
