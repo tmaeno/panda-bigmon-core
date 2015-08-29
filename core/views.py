@@ -627,7 +627,8 @@ def setupView(request, opmode='', hours=0, limit=-99, querytype='job', wildCardE
     return (query,extraQueryString)
 
 def cleanJobList(request, jobl, mode='nodrop', doAddMeta = True):
-    if 'mode' in request.session['requestParams'] and request.session['requestParams']['mode'] == 'drop': mode='drop'
+    if request is not None:
+        if 'mode' in request.session['requestParams'] and request.session['requestParams']['mode'] == 'drop': mode='drop'
     if doAddMeta:
         jobs = addJobMetadata(jobl)
     else:
@@ -5481,7 +5482,7 @@ Save result
 
     data = {}
 #    dashTaskSummary_preprocess(request)
-    generateGroupsToTrocess()
+    generateGroupsToTrocess(request)
     response = render_to_response('preprocessLog.html', data, RequestContext(request))
     patch_response_headers(response, cache_timeout=-1)
 
@@ -5533,7 +5534,7 @@ def generateGroupPreprocessQuery(fields, enddate):
 
 
 
-def generateGroupsToTrocess():
+def generateGroupsToTrocess(request):
 
     groupTypes = PreprocessGroupTypes.objects.all()
     lastGroupBuildTime = cache.get('lastpreproccesstime')
@@ -5548,47 +5549,89 @@ def generateGroupsToTrocess():
         new_cur.execute(querystr)
         mrecs = dictfetchall(new_cur)
         for rec in mrecs:
-            request = composeRequest(rec)
+            request = composeRequest(rec, groupType.page)
             print rec
 # Here, for each group make JSON generation
 
-def composeRequest(rec):
 
+
+def composeRequest(rec, grouptype):
+
+    '''
+    1. Compose query
+    2. For each function called from errorSummary call them as many times as flows depends on request parametes like view
+    3. Differ agregates as summ or one of sample
+
+    testjob = True,False
+    jobtype = 'analysis', 'production', 'rc_test'(in that case testjob = True)
+
+    query = []
+    + jobParamQuery = { 'modificationtime__range' : [startdate.strftime(defaultDatetimeFormat), enddate.strftime(defaultDatetimeFormat)] }
+    + paramsw from rec
+
+
+
+
+    pay attention:
+    errorSummaryDict, if 'cloud' in request.session['requestParams']; 'produsername' not in request.session['requestParams']
+    We should group by cloud.
+
+
+    def siteSummary
+    'cloud','computingsite'
+    We should group by cloud and computingsite. The rest in dashSummary should be Ok
+
+
+    def taskSummaryData
+    Summing over time
+        finished
+        cancelled
+    All rest one from all
+
+
+    '''
+
+    if grouptype == '/errors/':
+        prerequest
 
     pass
 
-def errorSummaryPreprocess(request):
+
+
+
+def errorSummaryPreprocess(testjobs, jobtype, query, request):
     valid, response = initRequest(request)
     if not valid: return response
 
-    testjobs = False
-    if 'prodsourcelabel' in request.session['requestParams'] and request.session['requestParams']['prodsourcelabel'].lower().find('test') >= 0:
-        testjobs = True
+#    testjobs = False
+#    if 'prodsourcelabel' in request.session['requestParams'] and request.session['requestParams']['prodsourcelabel'].lower().find('test') >= 0:
+#        testjobs = True
 
-    jobtype = ''
-    if 'jobtype' in request.session['requestParams']:
-        jobtype = request.session['requestParams']['jobtype']
-    elif '/analysis' in request.path:
-        jobtype = 'analysis'
-    elif '/production' in request.path:
-        jobtype = 'production'
-    elif testjobs:
-        jobtype = 'rc_test'
+#    jobtype = ''
+#    if 'jobtype' in request.session['requestParams']:
+#        jobtype = request.session['requestParams']['jobtype']
+#    elif '/analysis' in request.path:
+#        jobtype = 'analysis'
+#    elif '/production' in request.path:
+#        jobtype = 'production'
+#    elif testjobs:
+#        jobtype = 'rc_test'
 
-    if jobtype == '':
-        hours = 3
-        limit = 6000
-    elif jobtype.startswith('anal'):
-        hours = 6
-        limit = 6000
-    else:
-        hours = 12
-        limit = 6000
+#    if jobtype == '':
+#        hours = 3
+#        limit = 6000
+#    elif jobtype.startswith('anal'):
+#        hours = 6
+#        limit = 6000
+#    else:
+#        hours = 12
+#        limit = 6000
+#
+#    if 'hours' in request.session['requestParams']:
+#        hours = int(request.session['requestParams']['hours'])
 
-    if 'hours' in request.session['requestParams']:
-        hours = int(request.session['requestParams']['hours'])
+#    query,wildCardExtension  = setupView(request, hours=hours, limit=limit, wildCardExt=True)
 
-    query,wildCardExtension  = setupView(request, hours=hours, limit=limit, wildCardExt=True)
 
     if not testjobs: query['jobstatus__in'] = [ 'failed', 'holding' ]
     jobs = []
@@ -5597,20 +5640,20 @@ def errorSummaryPreprocess(request):
     print str(datetime.now())
 
     if testjobs:
-        jobs.extend(Jobsdefined4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
-        jobs.extend(Jobswaiting4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+        jobs.extend(Jobsdefined4.objects.filter(**query).extra('''where=[wildCardExtension]''').values(*values))
+        jobs.extend(Jobswaiting4.objects.filter(**query).extra('''where=[wildCardExtension]''').values(*values))
 
-    jobs.extend(Jobsactive4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
-    jobs.extend(Jobsarchived4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+    jobs.extend(Jobsactive4.objects.filter(**query).extra('''where=[wildCardExtension]''').values(*values))
+    jobs.extend(Jobsarchived4.objects.filter(**query).extra('''where=[wildCardExtension]''').values(*values))
 
     if (((datetime.now() - datetime.strptime(query['modificationtime__range'][0], "%Y-%m-%d %H:%M:%S" )).days > 1) or \
         ((datetime.now() - datetime.strptime(query['modificationtime__range'][1], "%Y-%m-%d %H:%M:%S" )).days > 1)):
-        jobs.extend(Jobsarchived.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+        jobs.extend(Jobsarchived.objects.filter(**query).extra('''where=[wildCardExtension]''').values(*values))
 
     print "step3-1-0"
     print str(datetime.now())
 
-
+    request = None
     jobs = cleanJobList(request, jobs, mode='nodrop', doAddMeta = False)
 
 
@@ -5627,6 +5670,11 @@ def errorSummaryPreprocess(request):
     #notime = True
     #if testjobs: notime = False
     notime = False #### behave as it used to before introducing notime for dashboards. Pull only 12hrs.
+
+    # added
+    limit = 10000000
+    hours = 10000000
+
     statesummary = dashSummary(request, hours, limit=limit, view=jobtype, cloudview='region', notime=notime)
     sitestates = {}
     savestates = [ 'finished', 'failed', 'cancelled', 'holding', ]
