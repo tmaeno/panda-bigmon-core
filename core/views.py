@@ -2810,10 +2810,21 @@ def wnInfo(request,site,wnname='all'):
         resp = []
         return  HttpResponse(json.dumps(resp), mimetype='text/html')
 
-def dashSummary(request, hours, limit=999999, view='all', cloudview='region', notime=True):
+def dashSummary(request, hours, limit=999999, view='all', cloudview='region', notime=True, preprocessParams=None):
     pilots = getPilotCounts(view)
-    query = setupView(request,hours=hours,limit=limit,opmode=view)
-    
+
+    if preprocessParams is None:
+        query = setupView(request,hours=hours,limit=limit,opmode=view)
+    else:
+        query = { 'modificationtime__range' : preprocessParams['modificationtime__range']}
+        selecttionParams = preprocessParams['selectionParam']
+        for papamKey,papamValue  in selecttionParams.iteritems():
+            if not papamKey.lower() == 'mode':
+                query[papamKey.lower()] = papamValue
+        notime=False
+
+
+
     if VOMODE == 'atlas' and len(request.session['requestParams']) == 0:
         cloudinfol = Cloudconfig.objects.filter().exclude(name='CMS').exclude(name='OSG').values('name','status')
     else:
@@ -2983,8 +2994,9 @@ def dashSummary(request, hours, limit=999999, view='all', cloudview='region', no
 
     return fullsummary
 
-def dashTaskSummary(request, hours, limit=999999, view='all'):
-    query = setupView(request,hours=hours,limit=limit,opmode=view) 
+def dashTaskSummary(request, hours, limit=999999, view='all', query=None):
+    if query is None:
+        query = setupView(request,hours=hours,limit=limit,opmode=view)
     tasksummarydata = taskSummaryData(request, query)
     tasks = {}
     totstates = {}
@@ -3834,7 +3846,7 @@ def jobStateSummary(jobs):
         statecount[job['jobstatus']] += 1
     return statecount
 
-def errorSummaryDict(request,jobs, tasknamedict, testjobs):
+def errorSummaryDict(request,jobs, tasknamedict, testjobs, preprocessParams = None):
     """ take a job list and produce error summaries from it """
     errsByCount = {}
     errsBySite = {}
@@ -3850,7 +3862,10 @@ def errorSummaryDict(request,jobs, tasknamedict, testjobs):
         if not testjobs:
             if job['jobstatus'] not in [ 'failed', 'holding' ]: continue
         site = job['computingsite']
-        if 'cloud' in request.session['requestParams']:
+
+        if (preprocessParams is not None and 'cloud' in preprocessParams['selectionParam']):
+            if site in homeCloud and homeCloud[site] != preprocessParams['selectionParam']['cloud']: continue
+        elif ('cloud' in request.session['requestParams']):
             if site in homeCloud and homeCloud[site] != request.session['requestParams']['cloud']: continue
         user = job['produsername']
         taskname = ''
@@ -3875,7 +3890,8 @@ def errorSummaryDict(request,jobs, tasknamedict, testjobs):
         ## Overall summary
         for f in flist:
             if job[f]:
-                if f == 'taskid' and job[f] < 1000000 and 'produsername' not in request.session['requestParams']:
+                if f == 'taskid' and job[f] < 1000000 and (((preprocessParams is None) and ('produsername' not in request.session['requestParams'])) or \
+                                                                   ((preprocessParams is not None) and ('produsername' not in preprocessParams['selectionParam']))):
                     pass
                 else:
                     if not f in sumd: sumd[f] = {}
@@ -3944,7 +3960,8 @@ def errorSummaryDict(request,jobs, tasknamedict, testjobs):
                 errsBySite[site]['errors'][errcode]['count'] += 1
                 errsBySite[site]['toterrors'] += 1
                 
-                if tasktype == 'jeditaskid' or taskid > 1000000 or 'produsername' in request.session['requestParams']:
+                if tasktype == 'jeditaskid' and taskid > 1000000 or (((preprocessParams is None) and ('produsername' in request.session['requestParams'])) or \
+                                                                   ((preprocessParams is not None) and ('produsername' in preprocessParams['selectionParam']))):
                     if taskid not in errsByTask:
                         errsByTask[taskid] = {}
                         errsByTask[taskid]['name'] = taskid
@@ -4054,39 +4071,59 @@ def getTaskName(tasktype,taskid):
 
 
 
-@cache_page(60*6)
-def errorSummary(request):
-    valid, response = initRequest(request)
-    if not valid: return response
+#@cache_page(60*6)
+def errorSummary(request, preprocessParams = None):
 
     testjobs = False
-    if 'prodsourcelabel' in request.session['requestParams'] and request.session['requestParams']['prodsourcelabel'].lower().find('test') >= 0:
-        testjobs = True
+    query = {}
+    if preprocessParams is None:
+        valid, response = initRequest(request)
+        if not valid: return response
+        if 'prodsourcelabel' in request.session['requestParams'] and request.session['requestParams']['prodsourcelabel'].lower().find('test') >= 0:
+            testjobs = True
+        jobtype = ''
+        if 'jobtype' in request.session['requestParams']:
+            jobtype = request.session['requestParams']['jobtype']
+        elif '/analysis' in request.path:
+            jobtype = 'analysis'
+        elif '/production' in request.path:
+            jobtype = 'production'
+        elif testjobs:
+            jobtype = 'rc_test'
 
-    jobtype = ''
-    if 'jobtype' in request.session['requestParams']:
-        jobtype = request.session['requestParams']['jobtype']
-    elif '/analysis' in request.path:
-        jobtype = 'analysis'
-    elif '/production' in request.path:
-        jobtype = 'production'
-    elif testjobs:
-        jobtype = 'rc_test'
+        if jobtype == '':
+            hours = 3
+            limit = 6000
+        elif jobtype.startswith('anal'):
+            hours = 6
+            limit = 6000
+        else:
+            hours = 12
+            limit = 6000
 
-    if jobtype == '':
-        hours = 3
-        limit = 6000
-    elif jobtype.startswith('anal'):
-        hours = 6
-        limit = 6000
+        if 'hours' in request.session['requestParams']:
+            hours = int(request.session['requestParams']['hours'])
+
+        joblimit = request.session['JOB_LIMIT']
+
+        query,wildCardExtension  = setupView(request, hours=hours, limit=limit, wildCardExt=True)
+
+
     else:
-        hours = 12
-        limit = 6000
+        testjobs = preprocessParams['testjobs']
+        jobtype = preprocessParams['jobtype']
+        query = { 'modificationtime__range' : preprocessParams['modificationtime__range']}
+        selecttionParams = preprocessParams['selectionParam']
+        for papamKey,papamValue in selecttionParams.iteritems():
+            if not papamKey.lower() == 'mode':
+                query[papamKey.lower()] = papamValue
+        wildCardExtension = '1=1'
+        joblimit = 20000000
+        hours = 100000000
+        limit = 10
 
-    if 'hours' in request.session['requestParams']:
-        hours = int(request.session['requestParams']['hours'])
-        
-    query,wildCardExtension  = setupView(request, hours=hours, limit=limit, wildCardExt=True)
+
+
 
     if not testjobs: query['jobstatus__in'] = [ 'failed', 'holding' ]
     jobs = []
@@ -4095,15 +4132,15 @@ def errorSummary(request):
     print str(datetime.now())
 
     if testjobs:
-        jobs.extend(Jobsdefined4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
-        jobs.extend(Jobswaiting4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+        jobs.extend(Jobsdefined4.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
+        jobs.extend(Jobswaiting4.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
 
-    jobs.extend(Jobsactive4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
-    jobs.extend(Jobsarchived4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+    jobs.extend(Jobsactive4.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
+    jobs.extend(Jobsarchived4.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
 
     if (((datetime.now() - datetime.strptime(query['modificationtime__range'][0], "%Y-%m-%d %H:%M:%S" )).days > 1) or \
         ((datetime.now() - datetime.strptime(query['modificationtime__range'][1], "%Y-%m-%d %H:%M:%S" )).days > 1)):
-        jobs.extend(Jobsarchived.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+        jobs.extend(Jobsarchived.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
 
     print "step3-1-0"
     print str(datetime.now())
@@ -4120,12 +4157,12 @@ def errorSummary(request):
 
 
     ## Build the error summary.
-    errsByCount, errsBySite, errsByUser, errsByTask, sumd, errHist = errorSummaryDict(request,jobs, tasknamedict, testjobs)
+    errsByCount, errsBySite, errsByUser, errsByTask, sumd, errHist = errorSummaryDict(request,jobs, tasknamedict, testjobs, preprocessParams)
     ## Build the state summary and add state info to site error summary
     #notime = True
     #if testjobs: notime = False
     notime = False #### behave as it used to before introducing notime for dashboards. Pull only 12hrs.
-    statesummary = dashSummary(request, hours, limit=limit, view=jobtype, cloudview='region', notime=notime)
+    statesummary = dashSummary(request, hours, limit=limit, view=jobtype, cloudview='region', notime=notime, preprocessParams=preprocessParams)
     sitestates = {}
     savestates = [ 'finished', 'failed', 'cancelled', 'holding', ]
     for cloud in statesummary:
@@ -4148,7 +4185,7 @@ def errorSummary(request):
         ## Build the task state summary and add task state info to task error summary
         print "step3-1-2"
         print str(datetime.now())
-        taskstatesummary = dashTaskSummary(request, hours, limit=limit, view=jobtype)
+        taskstatesummary = dashTaskSummary(request, hours, limit=limit, view=jobtype, query=query)
         print "step3-2"
         print str(datetime.now())
 
@@ -4180,6 +4217,26 @@ def errorSummary(request):
 
 
     request.session['max_age_minutes'] = 6
+
+
+    if (preprocessParams is not None):
+        data = {
+            'jobtype' : jobtype,
+            'njobs' : njobs,
+            'hours' : LAST_N_HOURS_MAX,
+            'user' : None,
+            'errsByCount' : errsByCount,
+            'errsBySite' : errsBySite,
+            'errsByUser' : errsByUser,
+            'errsByTask' : errsByTask,
+            'sumd' : sumd,
+            'errHist' : errHist,
+            'sortby' : sortby,
+            'taskname' : taskname,
+            'flowstruct' : flowstruct,
+        }
+        return data
+
     if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         nosorturl = removeParam(request.get_full_path(), 'sortby')
         xurl = extensibleURL(request)
@@ -5478,7 +5535,7 @@ Save result
 
 
 
-    #fillPreprocessGroupTypes()
+#    fillPreprocessGroupTypes()
 
     data = {}
 #    dashTaskSummary_preprocess(request)
@@ -5488,14 +5545,13 @@ Save result
 
     return response
 
-
 #class prepDashTaskSummary:
 
 
 
 def fillPreprocessGroupTypes():
 
-    sets = ['JEDITASKID,TASKID,PRODSOURCELABEL', 'JEDITASKID,TASKID,PILOTERRORCODE']
+    sets = ['JEDITASKID,TASKID,PRODSOURCELABEL,CLOUD,COMPUTINGSITE', 'JEDITASKID,TASKID,PILOTERRORCODE,CLOUD,COMPUTINGSITE']
 
     for set in sets:
         grouptypeid = PreprocessGroupTypes.objects.count()
@@ -5549,13 +5605,13 @@ def generateGroupsToTrocess(request):
         new_cur.execute(querystr)
         mrecs = dictfetchall(new_cur)
         for rec in mrecs:
-            request = composeRequest(rec, groupType.page)
+            data = doPreprocess(request, rec, groupType.page)
             print rec
 # Here, for each group make JSON generation
 
 
 
-def composeRequest(rec, grouptype):
+def doPreprocess(request, rec, grouptype):
 
     '''
     1. Compose query
@@ -5568,8 +5624,6 @@ def composeRequest(rec, grouptype):
     query = []
     + jobParamQuery = { 'modificationtime__range' : [startdate.strftime(defaultDatetimeFormat), enddate.strftime(defaultDatetimeFormat)] }
     + paramsw from rec
-
-
 
 
     pay attention:
@@ -5591,198 +5645,37 @@ def composeRequest(rec, grouptype):
 
     '''
 
+
+
+
     if grouptype == '/errors/':
-        prerequest
 
-    pass
+        #'cloud' in request.session['requestParams']
+        #'produsername' in request.session['requestParams']
 
+        sets = []
+        requestParams = {}
+        for key, value in rec.iteritems():
+            if not (key.lower() == 'timeupperbound' \
+                            or key.lower() =='testjobs' \
+                            or key.lower() =='freshestjob'):
+                requestParams[key] = value
 
+        requestParams['mode'] = 'nodrop'
+#        setattr(request.session, 'requestParams', requestParams)
 
+        timelowerbound = rec['TIMEUPPERBOUND'] - timedelta(hours=1)
+        sets.append({'testjobs': True, 'jobtype':'rc_test', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
+        sets.append({'testjobs': False, 'jobtype':'analysis', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
+        sets.append({'testjobs': False, 'jobtype':'production','selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)]})
 
-def errorSummaryPreprocess(testjobs, jobtype, query, request):
-    valid, response = initRequest(request)
-    if not valid: return response
+#        requestKeep = copy.deepcopy(request)
+        for paramSet in sets:
+            requestlocal = request
+            requestlocal.session['requestParams'] = requestParams
 
-#    testjobs = False
-#    if 'prodsourcelabel' in request.session['requestParams'] and request.session['requestParams']['prodsourcelabel'].lower().find('test') >= 0:
-#        testjobs = True
-
-#    jobtype = ''
-#    if 'jobtype' in request.session['requestParams']:
-#        jobtype = request.session['requestParams']['jobtype']
-#    elif '/analysis' in request.path:
-#        jobtype = 'analysis'
-#    elif '/production' in request.path:
-#        jobtype = 'production'
-#    elif testjobs:
-#        jobtype = 'rc_test'
-
-#    if jobtype == '':
-#        hours = 3
-#        limit = 6000
-#    elif jobtype.startswith('anal'):
-#        hours = 6
-#        limit = 6000
-#    else:
-#        hours = 12
-#        limit = 6000
-#
-#    if 'hours' in request.session['requestParams']:
-#        hours = int(request.session['requestParams']['hours'])
-
-#    query,wildCardExtension  = setupView(request, hours=hours, limit=limit, wildCardExt=True)
-
-
-    if not testjobs: query['jobstatus__in'] = [ 'failed', 'holding' ]
-    jobs = []
-    values = 'produsername', 'pandaid', 'cloud','computingsite','cpuconsumptiontime','jobstatus','transformation','prodsourcelabel','specialhandling','vo','modificationtime', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'currentpriority', 'computingelement'
-    print "step3-1"
-    print str(datetime.now())
-
-    if testjobs:
-        jobs.extend(Jobsdefined4.objects.filter(**query).extra('''where=[wildCardExtension]''').values(*values))
-        jobs.extend(Jobswaiting4.objects.filter(**query).extra('''where=[wildCardExtension]''').values(*values))
-
-    jobs.extend(Jobsactive4.objects.filter(**query).extra('''where=[wildCardExtension]''').values(*values))
-    jobs.extend(Jobsarchived4.objects.filter(**query).extra('''where=[wildCardExtension]''').values(*values))
-
-    if (((datetime.now() - datetime.strptime(query['modificationtime__range'][0], "%Y-%m-%d %H:%M:%S" )).days > 1) or \
-        ((datetime.now() - datetime.strptime(query['modificationtime__range'][1], "%Y-%m-%d %H:%M:%S" )).days > 1)):
-        jobs.extend(Jobsarchived.objects.filter(**query).extra('''where=[wildCardExtension]''').values(*values))
-
-    print "step3-1-0"
-    print str(datetime.now())
-
-    request = None
-    jobs = cleanJobList(request, jobs, mode='nodrop', doAddMeta = False)
-
-
-    njobs = len(jobs)
-    tasknamedict = taskNameDict(jobs)
-
-    print "step3-1-1"
-    print str(datetime.now())
-
-
-    ## Build the error summary.
-    errsByCount, errsBySite, errsByUser, errsByTask, sumd, errHist = errorSummaryDict(request,jobs, tasknamedict, testjobs)
-    ## Build the state summary and add state info to site error summary
-    #notime = True
-    #if testjobs: notime = False
-    notime = False #### behave as it used to before introducing notime for dashboards. Pull only 12hrs.
-
-    # added
-    limit = 10000000
-    hours = 10000000
-
-    statesummary = dashSummary(request, hours, limit=limit, view=jobtype, cloudview='region', notime=notime)
-    sitestates = {}
-    savestates = [ 'finished', 'failed', 'cancelled', 'holding', ]
-    for cloud in statesummary:
-        for site in cloud['sites']:
-            sitename = cloud['sites'][site]['name']
-            sitestates[sitename] = {}
-            for s in savestates:
-                sitestates[sitename][s] = cloud['sites'][site]['states'][s]['count']
-            sitestates[sitename]['pctfail'] = cloud['sites'][site]['pctfail']
-
-    for site in errsBySite:
-        sitename = site['name']
-        if sitename in sitestates:
-            for s in savestates:
-                if s in sitestates[sitename]: site[s] = sitestates[sitename][s]
-            if 'pctfail' in sitestates[sitename]: site['pctfail'] = sitestates[sitename]['pctfail']
-
-    taskname = ''
-    if not testjobs:
-        ## Build the task state summary and add task state info to task error summary
-        print "step3-1-2"
-        print str(datetime.now())
-        taskstatesummary = dashTaskSummary(request, hours, limit=limit, view=jobtype)
-        print "step3-2"
-        print str(datetime.now())
-
-        taskstates = {}
-        for task in taskstatesummary:
-            taskid = task['taskid']
-            taskstates[taskid] = {}
-            for s in savestates:
-                taskstates[taskid][s] = task['states'][s]['count']
-            if 'pctfail' in task: taskstates[taskid]['pctfail'] = task['pctfail']
-        for task in errsByTask:
-            taskid = task['name']
-            if taskid in taskstates:
-                for s in savestates:
-                    if s in taskstates[taskid]: task[s] = taskstates[taskid][s]
-                if 'pctfail' in taskstates[taskid]: task['pctfail'] = taskstates[taskid]['pctfail']
-        if 'jeditaskid' in request.session['requestParams']:
-            taskname = getTaskName('jeditaskid',request.session['requestParams']['jeditaskid'])
-
-
-    if 'sortby' in request.session['requestParams']:
-        sortby = request.session['requestParams']['sortby']
-    else:
-        sortby = 'alpha'
-    flowstruct = buildGoogleFlowDiagram(request, jobs=jobs)
-
-    print "step3-3"
-    print str(datetime.now())
-
-
-    request.session['max_age_minutes'] = 6
-    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
-        nosorturl = removeParam(request.get_full_path(), 'sortby')
-        xurl = extensibleURL(request)
-        jobsurl = xurl.replace('/errors/','/jobs/')
-
-        TFIRST = request.session['TFIRST']
-        TLAST = request.session['TLAST']
-        del request.session['TFIRST']
-        del request.session['TLAST']
-
-        data = {
-            'prefix': getPrefix(request),
-            'request' : request,
-            'viewParams' : request.session['viewParams'],
-            'requestParams' : request.session['requestParams'],
-            'requestString' : request.META['QUERY_STRING'],
-            'jobtype' : jobtype,
-            'njobs' : njobs,
-            'hours' : LAST_N_HOURS_MAX,
-            'limit' : request.session['JOB_LIMIT'],
-            'user' : None,
-            'xurl' : xurl,
-            'jobsurl' : jobsurl,
-            'nosorturl' : nosorturl,
-            'errsByCount' : errsByCount,
-            'errsBySite' : errsBySite,
-            'errsByUser' : errsByUser,
-            'errsByTask' : errsByTask,
-            'sumd' : sumd,
-            'errHist' : errHist,
-            'tfirst' : TFIRST,
-            'tlast' : TLAST,
-            'sortby' : sortby,
-            'taskname' : taskname,
-            'flowstruct' : flowstruct,
-        }
-        data.update(getContextVariables(request))
-        ##self monitor
-        endSelfMonitor(request)
-        response = render_to_response('errorSummary.html', data, RequestContext(request))
-        patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
-        return response
-    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
-        del request.session['TFIRST']
-        del request.session['TLAST']
-        resp = []
-        for job in jobs:
-            resp.append({ 'pandaid': job.pandaid, 'status': job.jobstatus, 'prodsourcelabel': job.prodsourcelabel, 'produserid' : job.produserid})
-        return  HttpResponse(json.dumps(resp), mimetype='text/html')
-
-
-
-
+            data = errorSummary(requestlocal, paramSet)
+    return 0
 
 
 
