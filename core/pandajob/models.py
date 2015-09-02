@@ -105,21 +105,23 @@ class PreprocessGroupTypes(models.Model):
 
 class PreprocessGroups(models.Model):
     groupid = models.BigIntegerField(primary_key=True, db_column='GROUPID')
-    grouptypeid = models.ForeignKey(PreprocessGroupTypes)
+    grouptypeid = models.BigIntegerField(db_column='GROUPTYPEID')
+#    grouptypeid = models.ForeignKey(PreprocessGroupTypes)
     timelowerbound = models.DateTimeField(null=True, db_column="TIMELOWERBOUND")
     timeupperbound = models.DateTimeField(null=True, db_column="TIMEUPPERBOUND")
     lasttimeupdated = models.DateTimeField(null=True, db_column="LASTTIMEUPDATED")
-    jsondata = models.TextField(blank=True, db_column="LASTTIMEUPDATED")
+    jsondata = models.TextField(blank=True, db_column="JSONDATA")
 
     class Meta:
         db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_GROUPS"'
 
 class PreprocessKeys(models.Model):
-    groupid = models.ForeignKey(PreprocessGroups)
+    id = models.BigIntegerField(primary_key=True, db_column='ID')
+    groupid = models.BigIntegerField(db_column='GROUPID')
     fieldname = models.CharField(max_length=20, db_column='FIELDNAME', blank=True)
     fieldvalue = models.CharField(max_length=20, db_column='FIELDVALUE', blank=True)
     class Meta:
-        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_KEYS"'
+        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_GROUPSKEYS"'
 
 
 class PreprocessJobs(models.Model):

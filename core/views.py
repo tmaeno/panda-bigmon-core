@@ -4145,6 +4145,9 @@ def errorSummary(request, preprocessParams = None):
     print "step3-1-0"
     print str(datetime.now())
 
+    jobsIDs = []
+    for job in jobs:
+        jobsIDs.append(job['pandaid'])
 
     jobs = cleanJobList(request, jobs, mode='nodrop', doAddMeta = False)
 
@@ -4234,6 +4237,7 @@ def errorSummary(request, preprocessParams = None):
             'sortby' : sortby,
             'taskname' : taskname,
             'flowstruct' : flowstruct,
+            'jobsIDs': jobsIDs,
         }
         return data
 
@@ -5605,13 +5609,13 @@ def generateGroupsToTrocess(request):
         new_cur.execute(querystr)
         mrecs = dictfetchall(new_cur)
         for rec in mrecs:
-            data = doPreprocess(request, rec, groupType.page)
+            data = doPreprocess(request, rec, groupType)
             print rec
 # Here, for each group make JSON generation
 
 
 
-def doPreprocess(request, rec, grouptype):
+def doPreprocess(request, rec, groupType):
 
     '''
     1. Compose query
@@ -5642,13 +5646,12 @@ def doPreprocess(request, rec, grouptype):
         cancelled
     All rest one from all
 
-
     '''
 
 
 
 
-    if grouptype == '/errors/':
+    if groupType.page == '/errors/':
 
         #'cloud' in request.session['requestParams']
         #'produsername' in request.session['requestParams']
@@ -5673,8 +5676,64 @@ def doPreprocess(request, rec, grouptype):
         for paramSet in sets:
             requestlocal = request
             requestlocal.session['requestParams'] = requestParams
-
+            startTime = datetime.now().strftime(defaultDatetimeFormat)
             data = errorSummary(requestlocal, paramSet)
+
+            newGroupID = PreprocessGroups.objects.count()
+            newJobsGroup = PreprocessGroups(
+                groupid = newGroupID,
+                grouptypeid = groupType.grouptypeid,
+                timelowerbound = timelowerbound,
+                timeupperbound = rec['TIMEUPPERBOUND'],
+                lasttimeupdated = startTime,
+                jsondata = data
+            );
+            newJobsGroup.save()
+
+
+            for key, value in requestParams.iteritems():
+                newParamSet = PreprocessKeys(
+                    groupid = newGroupID,
+                    fieldname = key,
+                    fieldvalue = value
+                )
+                newParamSet.save()
+
+
+
+
+
+
+
+            '''
+
+
+            3. PREPROCESS_JOBS
+
+
+                qduration=str(timezone.now())
+    request.session['qduration'] = qduration
+
+    try:
+        duration = (datetime.strptime(request.session['qduration'], "%Y-%m-%d %H:%M:%S.%f") - datetime.strptime(request.session['qtime'], "%Y-%m-%d %H:%M:%S.%f")).seconds
+    except:
+        duration =0
+    reqs = RequestStat(
+            server = request.session['hostname'],
+            qtime = request.session['qtime'],
+            load = request.session['load'],
+            mem = request.session['mem'],
+            qduration = request.session['qduration'],
+            duration = duration,
+            remote = request.session['remote'],
+            urls = request.session['urls'],
+            description=' '
+    )
+    reqs.save()
+
+
+            '''
+
     return 0
 
 
