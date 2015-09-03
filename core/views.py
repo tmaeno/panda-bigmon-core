@@ -4149,7 +4149,7 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
     print "step3-1-0"
     print str(datetime.now())
 
-    if justCheckJobs:
+    if justCheckJobs == True:
         return jobs
 
 
@@ -5624,8 +5624,51 @@ def generateGroupsToTrocess(request):
 
 
 def checkAlreadyPreProcessedJobs(paramSet):
+
+    '''
+    The query to test:
+    SELECT GROUPID, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM (
+    SELECT count(GROUPID) as NUMCRIT, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPSKEYS WHERE (FIELDNAME='PRODSOURCELABEL' AND FIELDVALUE='managed') OR
+    (FIELDNAME='CLOUD' AND FIELDVALUE='US') OR (FIELDNAME='TASKID' AND FIELDVALUE='6212723') OR (FIELDNAME='JEDITASKID' AND FIELDVALUE='6212723')
+    OR (FIELDNAME='COMPUTINGSITE' AND FIELDVALUE='NIKHEF-ELPROD_LONG') OR (FIELDNAME='mode' AND FIELDVALUE='nodrop') GROUP BY GROUPID) t1
+    LEFT JOIN
+    (SELECT COUNT(GROUPID) as NUMCRIT1, GROUPID as GROUPID1 FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPSKEYS GROUP BY GROUPID)t2
+    on (t1.NUMCRIT = t2.NUMCRIT1 and t1.GROUPID = t2.GROUPID1)
+    LEFT JOIN
+    (SELECT GROUPID as GROUPID2, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPS)t3 ON t1.GROUPID = t3.GROUPID2
+    WHERE (NUMCRIT1 is not NULL) AND (GROUPID1 is not NULL)
+    2. GET LOWER AND UPPER bounds and last time updated from PREPROCESS_GROUPS for corresponded GROUPIDs
+    '''
+
+    query = 'SELECT GROUPID, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM (SELECT count(GROUPID) as NUMCRIT, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPSKEYS WHERE '
+
+    counter = 0
+    maxcount = len(paramSet['selectionParam'])
+    for key, value in paramSet['selectionParam'].iteritems():
+        query +=  ' (FIELDNAME=\'%s\' AND FIELDVALUE=\'%s\') ' % (key,value)
+        counter += 1
+        if (counter < maxcount):
+            query +=' AND '
+
+
+    query += 'GROUP BY GROUPID) t1 LEFT JOIN (SELECT COUNT(GROUPID) as NUMCRIT1, GROUPID as GROUPID1 FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPSKEYS GROUP BY GROUPID)t2 on (t1.NUMCRIT = t2.NUMCRIT1 and t1.GROUPID = t2.GROUPID1) '
+    query += ' LEFT JOIN (SELECT GROUPID as GROUPID2, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPS)t3 ON t1.GROUPID = t3.GROUPID2 WHERE (NUMCRIT1 is not NULL) AND (GROUPID1 is not NULL)'
+
+    new_cur = connection.cursor()
+    new_cur.execute(query)
+    groupsids = dictfetchall(new_cur)
+
+    lastTimeUpdated = None
     jobs = []
-    return jobs
+
+    if groupsids is not None:
+        if 'LASTTIMEUPDATED' in groupsids:
+            lastTimeUpdated = 'LASTTIMEUPDATED'
+
+        for groupsid in groupsids:
+            jobs.append(groupsid['GROUPID'])
+
+    return jobs, lastTimeUpdated
 
 
 
@@ -5693,11 +5736,22 @@ def doPreprocess(request, rec, groupType):
             requestlocal.session['requestParams'] = requestParams
             startTime = datetime.now().strftime(defaultDatetimeFormat)
 
-            jobsWillBeProcessed = errorSummary(requestlocal, paramSet)
-            jobsAlreadyProcessed = checkAlreadyPreProcessedJobs(paramSet)
+            jobsWillBeProcessed = errorSummary(requestlocal, paramSet, justCheckJobs=True)
+            jobsAlreadyProcessed, lasttimeProcessed = checkAlreadyPreProcessedJobs(paramSet)
 
+            toProcess = True
 
-            data = errorSummary(requestlocal, paramSet, justCheckJobs=True)
+            if len(jobsWillBeProcessed) == len(jobsAlreadyProcessed):
+                for jobWillAllr in jobsWillBeProcessed:
+                    if jobsWillBeProcessed['pandaid'] in jobsAlreadyProcessed:
+                        if jobsWillBeProcessed['modificationtime'] > lasttimeProcessed:
+                            toProcess = False
+                            break
+
+            if toProcess == False:
+                continue
+
+            data = errorSummary(requestlocal, paramSet )
 
             newGroupID = PreprocessGroups.objects.count()
             newJobsGroup = PreprocessGroups(
@@ -5734,8 +5788,6 @@ def doPreprocess(request, rec, groupType):
 
             '''
 
-
-            3. PREPROCESS_JOBS
 
 
                 qduration=str(timezone.now())
