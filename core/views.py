@@ -5659,16 +5659,16 @@ def checkAlreadyPreProcessedJobs(paramSet):
     groupsids = dictfetchall(new_cur)
 
     lastTimeUpdated = None
-    jobs = []
+    groupsidret = []
 
     if groupsids is not None:
         if 'LASTTIMEUPDATED' in groupsids:
             lastTimeUpdated = 'LASTTIMEUPDATED'
 
         for groupsid in groupsids:
-            jobs.append(groupsid['GROUPID'])
+            groupsidret.append(groupsid['GROUPID'])
 
-    return jobs, lastTimeUpdated
+    return groupsidret, lastTimeUpdated
 
 
 
