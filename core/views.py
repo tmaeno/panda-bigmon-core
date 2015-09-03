@@ -5661,14 +5661,30 @@ def checkAlreadyPreProcessedJobs(paramSet):
     lastTimeUpdated = None
     groupsidret = []
 
-    if groupsids is not None:
+    if len(groupsids) > 0:
         if 'LASTTIMEUPDATED' in groupsids:
             lastTimeUpdated = 'LASTTIMEUPDATED'
 
         for groupsid in groupsids:
-            groupsidret.append(groupsid['GROUPID'])
 
-    return groupsidret, lastTimeUpdated
+            jobsgroup = {}
+            jobsgroup['GROUPID'] = groupsid['GROUPID']
+            jobsgroup['lastTimeUpdated'] = lastTimeUpdated
+            query = {}
+            query['GROUPID'] = groupsid
+            jobsids = []
+            jobsids = PreprocessJobs.objects.filter(**query).values("PANDAID")
+            jobsgroup['jobsids'] = jobsids
+            groupsidret.append(jobsgroup)
+
+        print "groupsidret"
+        print groupsidret
+        print groupsids
+        exit(1)
+
+## We should return jobs, not groups
+
+    return groupsidret
 
 
 
@@ -5737,10 +5753,10 @@ def doPreprocess(request, rec, groupType):
             startTime = datetime.now().strftime(defaultDatetimeFormat)
 
             jobsWillBeProcessed = errorSummary(requestlocal, paramSet, justCheckJobs=True)
-            jobsAlreadyProcessed, lasttimeProcessed = checkAlreadyPreProcessedJobs(paramSet)
+            jobsAlreadyProcessed = checkAlreadyPreProcessedJobs(paramSet)
 
             toProcess = True
-
+            
             if len(jobsWillBeProcessed) == len(jobsAlreadyProcessed):
                 for jobWillAllr in jobsWillBeProcessed:
                     if jobsWillBeProcessed['pandaid'] in jobsAlreadyProcessed:
