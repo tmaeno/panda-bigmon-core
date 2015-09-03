@@ -26,7 +26,7 @@ from django.db import connection, transaction
 from core.common.utils import getPrefix, getContextVariables, QuerySetChain
 from core.settings import STATIC_URL, FILTER_UI_ENV, defaultDatetimeFormat
 from core.pandajob.models import PandaJob, Jobsactive4, Jobsdefined4, Jobswaiting4, Jobsarchived4, Jobsarchived, \
-        GetRWWithPrioJedi3DAYS, PreprocessGroupTypes, PreprocessGroups, PreprocessKeys
+        GetRWWithPrioJedi3DAYS, PreprocessGroupTypes, PreprocessGroups, PreprocessKeys, PreprocessJobs
 from resource.models import Schedconfig
 from core.common.models import Filestable4
 from core.common.models import Datasets
@@ -4072,7 +4072,7 @@ def getTaskName(tasktype,taskid):
 
 
 #@cache_page(60*6)
-def errorSummary(request, preprocessParams = None):
+def errorSummary(request, preprocessParams = None, justCheckJobs = False):
 
     testjobs = False
     query = {}
@@ -4127,7 +4127,11 @@ def errorSummary(request, preprocessParams = None):
 
     if not testjobs: query['jobstatus__in'] = [ 'failed', 'holding' ]
     jobs = []
-    values = 'produsername', 'pandaid', 'cloud','computingsite','cpuconsumptiontime','jobstatus','transformation','prodsourcelabel','specialhandling','vo','modificationtime', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'currentpriority', 'computingelement'
+
+    if justCheckJobs:
+        values = 'pandaid', 'modificationtime'
+    else:
+        values = 'produsername', 'pandaid', 'cloud','computingsite','cpuconsumptiontime','jobstatus','transformation','prodsourcelabel','specialhandling','vo','modificationtime', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'currentpriority', 'computingelement'
     print "step3-1"
     print str(datetime.now())
 
@@ -4144,6 +4148,10 @@ def errorSummary(request, preprocessParams = None):
 
     print "step3-1-0"
     print str(datetime.now())
+
+    if justCheckJobs:
+        return jobs
+
 
     jobsIDs = []
     for job in jobs:
@@ -5615,6 +5623,13 @@ def generateGroupsToTrocess(request):
 
 
 
+def checkAlreadyPreProcessedJobs(paramSet):
+    jobs = []
+    return jobs
+
+
+
+
 def doPreprocess(request, rec, groupType):
 
     '''
@@ -5677,7 +5692,12 @@ def doPreprocess(request, rec, groupType):
             requestlocal = request
             requestlocal.session['requestParams'] = requestParams
             startTime = datetime.now().strftime(defaultDatetimeFormat)
-            data = errorSummary(requestlocal, paramSet)
+
+            jobsWillBeProcessed = errorSummary(requestlocal, paramSet)
+            jobsAlreadyProcessed = checkAlreadyPreProcessedJobs(paramSet)
+
+
+            data = errorSummary(requestlocal, paramSet, justCheckJobs=True)
 
             newGroupID = PreprocessGroups.objects.count()
             newJobsGroup = PreprocessGroups(
@@ -5698,6 +5718,13 @@ def doPreprocess(request, rec, groupType):
                     fieldvalue = value
                 )
                 newParamSet.save()
+
+            for job in data['jobsIDs']:
+                newJob = PreprocessJobs(
+                    groupid = newGroupID,
+                    pandaid = job
+                )
+                newJob.save()
 
 
 

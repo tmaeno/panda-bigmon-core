@@ -125,7 +125,7 @@ class PreprocessKeys(models.Model):
 
 
 class PreprocessJobs(models.Model):
-    groupid = models.ForeignKey(PreprocessGroups)
+    groupid = models.BigIntegerField(db_column='GROUPID')
     pandaid = models.BigIntegerField(db_column='PANDAID')
     class Meta:
         db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_JOBS"'
