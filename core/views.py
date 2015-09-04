@@ -1,15 +1,11 @@
+
 import logging, re, json, commands, os, copy
-from copy import deepcopy
 from datetime import datetime, timedelta
 import time
-import json,zlib
+import json
 import copy
 import itertools, random
 import string as strm
-
-from urllib import urlencode
-from urlparse import urlparse, urlunparse, parse_qs
-
 
 from django.http import HttpResponse
 from django.http import HttpResponseRedirect
@@ -22,16 +18,14 @@ from django.utils import timezone
 from django.utils.cache import patch_cache_control, patch_response_headers
 from django.db.models import Q
 from django.core.cache import cache
-from django.core.handlers.wsgi import WSGIRequest
 from django.utils import encoding
 from django.conf import settings as djangosettings
 from django.db import connection, transaction
 
+
 from core.common.utils import getPrefix, getContextVariables, QuerySetChain
 from core.settings import STATIC_URL, FILTER_UI_ENV, defaultDatetimeFormat
-from core.pandajob.models import PandaJob, Jobsactive4, Jobsdefined4, Jobswaiting4, Jobsarchived4, Jobsarchived, \
-    GetRWWithPrioJedi3DAYS, PreprocessQueues, PreprocessGroupTypes, PreprocessGroups, PreprocessKeys, PreprocessJobs, \
-    RemainedEventsPerCloud3dayswind
+from core.pandajob.models import PandaJob, Jobsactive4, Jobsdefined4, Jobswaiting4, Jobsarchived4, Jobsarchived, GetRWWithPrioJedi3DAYS
 from resource.models import Schedconfig
 from core.common.models import Filestable4
 from core.common.models import Datasets
@@ -56,8 +50,6 @@ from core.common.models import JediWorkQueue
 from core.common.models import RequestStat
 from core.settings.config import ENV
 
-import multiprocessing as mp
-import threading
 
 from time import gmtime, strftime
 from settings.local import dbaccess
@@ -65,10 +57,6 @@ import string as strm
 from django.views.decorators.cache import cache_page
 
 import ErrorCodes
-
-import fcntl
-
-
 errorFields = []
 errorCodes = {}
 errorStages = {}
@@ -88,7 +76,7 @@ cloudList = [ 'CA', 'CERN', 'DE', 'ES', 'FR', 'IT', 'ND', 'NL', 'RU', 'TW', 'UK'
 statelist = [ 'defined', 'waiting', 'pending', 'assigned', 'throttled', \
              'activated', 'sent', 'starting', 'running', 'holding', \
              'transferring', 'finished', 'failed', 'cancelled', 'merging']
-sitestatelist = [ 'defined', 'waiting', 'assigned', 'throttled',  'activated', 'sent', 'starting', 'running', 'holding', 'merging', 'transferring', 'finished', 'failed', 'cancelled' ]
+sitestatelist = [ 'defined', 'waiting', 'assigned', 'throttled',  'activated', 'sent', 'starting', 'running', 'holding', 'transferring', 'finished', 'failed', 'cancelled' ]
 eventservicestatelist = [ 'ready', 'sent', 'running', 'finished', 'cancelled', 'discarded', 'done', 'failed' ]
 taskstatelist = [ 'registered', 'defined', 'assigning', 'ready', 'pending', 'scouting', 'scouted', 'running', 'prepared', 'done', 'failed', 'finished', 'aborting', 'aborted', 'finishing', 'topreprocess', 'preprocessing', 'tobroken', 'broken', 'toretry', 'toincexec', 'rerefine' ]
 taskstatelist_short = [ 'reg', 'def', 'assgn', 'rdy', 'pend', 'scout', 'sctd', 'run', 'prep', 'done', 'fail', 'finish', 'abrtg', 'abrtd', 'finishg', 'toprep', 'preprc', 'tobrok', 'broken', 'retry', 'incexe', 'refine' ]
@@ -128,29 +116,6 @@ standard_taskfields = [ 'tasktype', 'superstatus', 'corecount', 'taskpriority', 
 VOLIST = [ 'atlas', 'bigpanda', 'htcondor', 'core', ]
 VONAME = { 'atlas' : 'ATLAS', 'bigpanda' : 'BigPanDA', 'htcondor' : 'HTCondor', 'core' : 'LSST', '' : '' }
 VOMODE = ' '
-
-grequest = {}
-
-
-
-class DJangoLock:
-
-    def __init__(self, filename):
-        self.filename = filename
-        # This will create it if it does not exist already
-        self.handle = open(filename, 'w')
-
-    # flock() is a blocking call unless it is bitwise ORed with LOCK_NB to avoid blocking
-    # on lock acquisition.  This blocking is what I use to provide atomicity across forked
-    # Django processes since native python locks and semaphores only work at the thread level
-    def acquire(self):
-        fcntl.flock(self.handle, fcntl.LOCK_EX)
-
-    def release(self):
-        fcntl.flock(self.handle, fcntl.LOCK_UN)
-
-    def __del__(self):
-        self.handle.close()
 
 
 
@@ -196,14 +161,7 @@ def initRequest(request):
     viewParams = {}
     #if not 'viewParams' in request.session:
     request.session['viewParams'] = viewParams
-
-    url = request.get_full_path()
-    u = urlparse(url)
-    query = parse_qs(u.query)
-    query.pop('timestamp', None)
-    u = u._replace(query=urlencode(query, True))
-    request.session['notimestampurl'] = urlunparse(u) + ('&' if len(query) > 0 else '?')
-
+    
     
     if 'USER' in os.environ and os.environ['USER'] != 'apache':
         request.session['debug'] = True
@@ -350,7 +308,7 @@ def setupView(request, opmode='', hours=0, limit=-99, querytype='job', wildCardE
     elif limit != -99 and limit > 0:
         request.session['JOB_LIMIT'] = limit
     elif VOMODE == 'atlas':
-        request.session['JOB_LIMIT'] = 10000
+        request.session['JOB_LIMIT'] = 1000
     else:
         request.session['JOB_LIMIT'] = 10000
 
@@ -668,8 +626,7 @@ def setupView(request, opmode='', hours=0, limit=-99, querytype='job', wildCardE
     return (query,extraQueryString)
 
 def cleanJobList(request, jobl, mode='nodrop', doAddMeta = True):
-    if request is not None:
-        if 'mode' in request.session['requestParams'] and request.session['requestParams']['mode'] == 'drop': mode='drop'
+    if 'mode' in request.session['requestParams'] and request.session['requestParams']['mode'] == 'drop': mode='drop'
     doAddMetaStill = False
     if 'fields' in request.session['requestParams']:
         fields = request.session['requestParams']['fields'].split("|")
@@ -685,7 +642,7 @@ def cleanJobList(request, jobl, mode='nodrop', doAddMeta = True):
                 job['taskbuffererrordiag'] = 'Rerun scheduled to pick up unprocessed events'
                 job['piloterrorcode'] = 0
                 job['piloterrordiag'] = 'Job terminated by signal from PanDA server'
-#                job['jobstatus'] = 'finished'
+                job['jobstatus'] = 'finished'
             if 'taskbuffererrorcode' in job and job['taskbuffererrorcode'] == 112:
                 job['taskbuffererrordiag'] = 'All events processed, merge job created'
                 job['piloterrorcode'] = 0
@@ -695,7 +652,7 @@ def cleanJobList(request, jobl, mode='nodrop', doAddMeta = True):
                 job['taskbuffererrordiag'] = 'No rerun to pick up unprocessed, at max attempts'
                 job['piloterrorcode'] = 0
                 job['piloterrordiag'] = 'Job terminated by signal from PanDA server'
-#                job['jobstatus'] = 'finished'
+                job['jobstatus'] = 'finished'
             if 'taskbuffererrorcode' in job and job['taskbuffererrorcode'] == 115:
                 job['taskbuffererrordiag'] = 'No events remaining, other jobs still processing'
                 job['piloterrorcode'] = 0
@@ -893,7 +850,6 @@ def cleanTaskList(request, tasks):
             dsinfo[taskid].append(ds)
 
     new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
-    new_cur.close()
     connection.commit()
     connection.leave_transaction_management()
 
@@ -999,30 +955,15 @@ def jobSummaryDict(request, jobs, fieldlist = None):
                 esjobdict[job['pandaid']][s] = 0
     if len(esjobs) > 0:
         sumd['eventservice'] = {}
-
-        tmpTableName = "ATLAS_PANDABIGMON.TMP_IDS1"
-        transactionKey = random.randrange(1000000)
-
-        connection.enter_transaction_management()
-        new_cur = connection.cursor()
-        for pandaid in esjobs:
-            new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,pandaid,transactionKey)) # Backend dependable
-        connection.commit()
-
-        new_cur.execute("SELECT PANDAID,STATUS FROM ATLAS_PANDA.JEDI_EVENTS WHERE PANDAID in (SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)" % (tmpTableName, transactionKey))
-        evtable = dictfetchall(new_cur)
-
-        new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
-        new_cur.close()
-        connection.commit()
-        connection.leave_transaction_management()
-
+        esquery = {}
+        esquery['pandaid__in'] = esjobs
+        evtable = JediEvents.objects.filter(**esquery).values('pandaid','status')
         for ev in evtable:
-            evstat = eventservicestatelist[ev['STATUS']]
+            evstat = eventservicestatelist[ev['status']]
             if evstat not in sumd['eventservice']:
                 sumd['eventservice'][evstat] = 0
             sumd['eventservice'][evstat] += 1
-            esjobdict[ev['PANDAID']][evstat] += 1
+            esjobdict[ev['pandaid']][evstat] += 1
 
     ## convert to ordered lists
     suml = []
@@ -1333,7 +1274,7 @@ def mainPage(request):
         for env in os.environ:
             debuginfo += "%s = %s<br>" % ( env, os.environ[env] )
 
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         del request.session['TFIRST']
         del request.session['TLAST']
         data = {
@@ -1360,7 +1301,7 @@ def helpPage(request):
     setupView(request)
     del request.session['TFIRST']
     del request.session['TLAST']
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         data = {
             'prefix': getPrefix(request),
             'request' : request,
@@ -1373,7 +1314,7 @@ def helpPage(request):
         response = render_to_response('completeHelp.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif   ( ('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         return  HttpResponse('json', mimetype='text/html')
     else:
         return  HttpResponse('not understood', mimetype='text/html')
@@ -1511,7 +1452,6 @@ def jobList(request, mode=None, param=None):
 
     droplist = []
     droppedIDs = set()
-    droppedPmerge = set()
 
     if dropmode and (len(taskids) == 1):
         print 'doing the drop'
@@ -1537,8 +1477,6 @@ def jobList(request, mode=None, param=None):
             if dropJob == 0 or isEventService(job):
                 if not (job['processingtype'] == 'pmerge'):
                     newjobs.append(job)
-                else:
-                    droppedPmerge.add(pandaid)
             else:
                 if not pandaid in droppedIDs:
                     droppedIDs.add(pandaid)
@@ -1656,7 +1594,7 @@ def jobList(request, mode=None, param=None):
     else:
         showwarn=1
 
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         sumd, esjobdict = jobSummaryDict(request, jobs)
         testjobs = False
 
@@ -1682,7 +1620,6 @@ def jobList(request, mode=None, param=None):
         TLAST = request.session['TLAST']
         del request.session['TFIRST']
         del request.session['TLAST']
-        nodropPartURL = cleanURLFromDropPart(xurl)
         data = {
             'prefix': getPrefix(request),
             'errsByCount' : errsByCount,
@@ -1697,7 +1634,7 @@ def jobList(request, mode=None, param=None):
             'sumd' : sumd,
             'xurl' : xurl,
             'droplist' : droplist,
-            'ndrops' : len(droplist) if len(droplist) > 0 else (- len(droppedPmerge)),
+            'ndrops' : len(droplist),
             'tfirst' : TFIRST,
             'tlast' : TLAST,
             'plow' : PLOW,
@@ -1713,7 +1650,6 @@ def jobList(request, mode=None, param=None):
             'nosorturl' : nosorturl,
             'taskname' : taskname,
             'flowstruct' : flowstruct,
-            'nodropPartURL':nodropPartURL,
         }
         data.update(getContextVariables(request))
         ##self monitor
@@ -1724,7 +1660,7 @@ def jobList(request, mode=None, param=None):
             response = render_to_response('jobList.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif   ( ('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del request.session['TFIRST']
         del request.session['TLAST']
         if (('fields' in request.session['requestParams']) and (len(jobs) > 0)):
@@ -1744,58 +1680,6 @@ def isEventService(job):
         return True
     else:
         return False
-
-def cleanURLFromDropPart(url):
-    posDropPart = url.find('mode')
-    if ( posDropPart== -1):
-        return url
-    else:
-        if url[posDropPart-1] == '&':
-            posDropPart -= 1
-        nextAmp = url.find('&', posDropPart+1)
-        if nextAmp == -1:
-            return url[0:posDropPart]
-        else:
-            return url[0:posDropPart] + url[nextAmp+1:]
-
-
-
-def getSequentialRetries(pandaid, jeditaskid):
-    retryquery = {}
-    retryquery['jeditaskid'] = jeditaskid
-    retryquery['newpandaid'] = pandaid
-    retries = JediJobRetryHistory.objects.filter(**retryquery).order_by('oldpandaid').reverse().values()
-    newretries = []
-    newretries.extend(retries)
-    for retry in retries:
-        if retry['relationtype'] == 'merge':
-            jsquery = {}
-            jsquery['jeditaskid'] = jeditaskid
-            jsquery['pandaid'] = retry['oldpandaid']
-            values = [ 'pandaid', 'jobstatus', 'jeditaskid' ]
-            jsjobs = []
-            jsjobs.extend(Jobsdefined4.objects.filter(**jsquery).values(*values))
-            jsjobs.extend(Jobsactive4.objects.filter(**jsquery).values(*values))
-            jsjobs.extend(Jobswaiting4.objects.filter(**jsquery).values(*values))
-            jsjobs.extend(Jobsarchived4.objects.filter(**jsquery).values(*values))
-            jsjobs.extend(Jobsarchived.objects.filter(**jsquery).values(*values))
-            for job in jsjobs:
-                if job['jobstatus'] == 'failed':
-                    for retry in newretries:
-                        if retry['oldpandaid'] == job['pandaid']:
-                            retry['relationtype'] = 'retry'
-                    newretries.extend(getSequentialRetries(job['pandaid'], job['jeditaskid']))
-
-    outlist=[]
-    added_keys = set()
-    for row in newretries:
-        lookup = row['oldpandaid']
-        if lookup not in added_keys:
-            outlist.append(row)
-            added_keys.add(lookup)
-
-    return outlist
-
 
 @csrf_exempt
 @cache_page(60*6)
@@ -1902,7 +1786,7 @@ def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
     if 'nofiles' not in request.session['requestParams']:
         ## Get job files. First look in JEDI datasetcontents
         print "Pulling file info"
-        files.extend(Filestable4.objects.filter(pandaid=pandaid).order_by('type').values())
+        files.extend(JediDatasetContents.objects.filter(pandaid=pandaid).order_by('type').values())
         ninput = 0
         noutput = 0
         npseudo_input = 0
@@ -1928,6 +1812,7 @@ def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
                 if (i == 'input'): fileSummary += ', size: '+inputFilesSize+'(MB)'
                 fileSummary += '; '
             fileSummary = fileSummary[:-2]
+        files.extend(Filestable4.objects.filter(pandaid=pandaid).order_by('type').values())
         if len(files) == 0:
             files.extend(FilestableArch.objects.filter(pandaid=pandaid).order_by('type').values())
         if len(files) > 0:
@@ -1963,14 +1848,6 @@ def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
         stdlog = stdout.replace('.out','.log')
     else:
         stdout = stderr = stdlog = None
-
-
-    filesSorted = []
-    filesSorted.extend(sorted([file for file in files if file['type'] == 'input'], key=lambda x:x['lfn']))
-    filesSorted.extend(sorted([file for file in files if file['type'] == 'pseudo_input'], key=lambda x:x['lfn']))
-    filesSorted.extend(sorted([file for file in files if file['type'] == 'output'], key=lambda x:x['lfn']))
-    filesSorted.extend(sorted([file for file in files if file['type'] == 'log'], key=lambda x:x['lfn']))
-    files = filesSorted
 
     ## Check for object store based log
     oslogpath = None
@@ -2021,12 +1898,10 @@ def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
         retryquery['jeditaskid'] = job['jeditaskid']
         retryquery['oldpandaid'] = job['pandaid']
         retries = JediJobRetryHistory.objects.filter(**retryquery).order_by('newpandaid').reverse().values()
-        if job['jobstatus'] == 'failed':
-            for retry in retries:
-                if retry['relationtype'] == 'merge':
-                    retry['relationtype'] = 'retry'
-
-        pretries = getSequentialRetries(job['pandaid'], job['jeditaskid'])
+        pretryquery = {}
+        pretryquery['jeditaskid'] = job['jeditaskid']
+        pretryquery['newpandaid'] = job['pandaid']
+        pretries = JediJobRetryHistory.objects.filter(**pretryquery).order_by('oldpandaid').reverse().values()
     else:
         retries = None
         pretries = None
@@ -2110,7 +1985,7 @@ def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
         if len(errorinfo) > 0:
             job['errorinfo'] = errorinfo
 
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         del request.session['TFIRST']
         del request.session['TLAST']
         data = {
@@ -2154,27 +2029,14 @@ def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
             response = render_to_response('jobInfo.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del request.session['TFIRST']
         del request.session['TLAST']
-        data = {'files':files,
-                'job':job,
-                'dsfiles' : dsfiles,
-               }
-
-        return  HttpResponse(json.dumps(data, cls=DateTimeEncoder), mimetype='text/html')
+        return  HttpResponse('json', mimetype='text/html')
     else:
         del request.session['TFIRST']
         del request.session['TLAST']
         return  HttpResponse('not understood', mimetype='text/html')
-
-
-class DateTimeEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, datetime):
-            return o.isoformat()
-
-
 
 def userList(request):
     valid, response = initRequest(request)
@@ -2280,7 +2142,7 @@ def userList(request):
             
         jobsumd = jobSummaryDict(request, jobs, sumparams)[0]
         
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         TFIRST = request.session['TFIRST']
         TLAST = request.session['TLAST']
         del request.session['TFIRST']
@@ -2306,7 +2168,7 @@ def userList(request):
         response = render_to_response('userList.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif ( ('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del request.session['TFIRST']
         del request.session['TLAST']
         resp = sumd
@@ -2320,13 +2182,8 @@ def userInfo(request, user=''):
         if 'user' in request.session['requestParams']: user = request.session['requestParams']['user']
         if 'produsername' in request.session['requestParams']: user = request.session['requestParams']['produsername']
 
-    if 'days' in request.session['requestParams']:
-        days = int(request.session['requestParams']['days'])
-    else:
-        days = 7
-
     ## Tasks owned by the user
-    startdate = timezone.now() - timedelta(hours=days*24)
+    startdate = timezone.now() - timedelta(hours=7*24)
     startdate = startdate.strftime(defaultDatetimeFormat)
     enddate = timezone.now().strftime(defaultDatetimeFormat)
     query = { 'modificationtime__range' : [startdate, enddate] }
@@ -2414,7 +2271,7 @@ def userInfo(request, user=''):
         njobsmax = display_limit
         url_nolimit = request.get_full_path()
 
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         sumd = userSummaryDict(jobs)
         flist =  [ 'jobstatus', 'prodsourcelabel', 'processingtype', 'specialhandling', 'transformation', 'jobsetid', 'jeditaskid', 'computingsite', 'cloud', 'workinggroup', 'homepackage', 'inputfileproject', 'inputfiletype', 'attemptnr', 'priorityrange', 'jobsetrange' ]
         if VOMODE != 'atlas':
@@ -2475,7 +2332,7 @@ def userInfo(request, user=''):
         response = render_to_response('userInfo.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del request.session['TFIRST']
         del request.session['TLAST']
         resp = sumd
@@ -2492,7 +2349,6 @@ def siteList(request):
     ### Add any extensions to the query determined from the URL  
     if VOMODE == 'core': query['siteid__contains'] = 'CORE'
     prod = False
-    extraParCondition = ''
     for param in request.session['requestParams']:
         if param == 'category' and request.session['requestParams'][param] == 'multicloud':
             query['multicloud__isnull'] = False
@@ -2502,18 +2358,8 @@ def siteList(request):
             query['siteid__icontains'] = 'test'
         if param == 'category' and request.session['requestParams'][param] == 'production':
             prod = True
-        if param == 'catchall':
-            wildCards = request.session['requestParams'][param].split('|')
-            countCards = len(wildCards)
-            currentCardCount = 1
-            extraParCondition = '('
-            for card in wildCards:
-                extraParCondition += preprocessWildCardString( escapeInput(card) , 'catchall')
-                if (currentCardCount < countCards): extraParCondition +=' OR '
-                currentCardCount += 1
-            extraParCondition += ')'
         for field in Schedconfig._meta.get_all_field_names():
-            if param == field and not (param =='catchall'):
+            if param == field:
                 query[param] = escapeInput(request.session['requestParams'][param])
     
     siteres = Schedconfig.objects.filter(**query).exclude(cloud='CMS').values()
@@ -2578,7 +2424,7 @@ def siteList(request):
         clouds = None
     xurl = extensibleURL(request)
     nosorturl = removeParam(xurl, 'sortby',mode='extensible')
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         sumd = siteSummaryDict(sites)
         del request.session['TFIRST']
         del request.session['TLAST']
@@ -2599,7 +2445,7 @@ def siteList(request):
         response = render_to_response('siteList.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del request.session['TFIRST']
         del request.session['TLAST']
         resp = sites
@@ -2631,7 +2477,7 @@ def siteInfo(request, site=''):
     except AttributeError:
         pass
 
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         attrs = []
         if siterec:
             attrs.append({'name' : 'GOC name', 'value' : siterec.gocname })
@@ -2697,7 +2543,7 @@ def siteInfo(request, site=''):
         response = render_to_response('siteInfo.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del request.session['TFIRST']
         del request.session['TLAST']
         resp = []
@@ -2751,8 +2597,7 @@ def siteSummary(query, notime=True):
 def taskSummaryData(request, query):
     summary = []
     querynotime = query
-    if 'modificationtime__range' in querynotime:
-        del querynotime['modificationtime__range']
+    del querynotime['modificationtime__range']
     summary.extend(Jobsactive4.objects.filter(**querynotime).values('taskid','jobstatus').annotate(Count('jobstatus')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
     summary.extend(Jobsdefined4.objects.filter(**querynotime).values('taskid','jobstatus').annotate(Count('jobstatus')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
     summary.extend(Jobswaiting4.objects.filter(**querynotime).values('taskid','jobstatus').annotate(Count('jobstatus')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
@@ -2794,21 +2639,14 @@ def wnSummary(query):
 @cache_page(60*6)
 def wnInfo(request,site,wnname='all'):
     """ Give worker node level breakdown of site activity. Spot hot nodes, error prone nodes. """
-
-    if 'hours' in request.REQUEST:
-        hours = int(request.REQUEST['hours'])
-    else:
-        hours=12
-
     valid, response = initRequest(request)
     if not valid: return response
     errthreshold = 15
-
     if wnname != 'all':
-        query = setupView(request,hours=hours,limit=999999)
+        query = setupView(request,hours=12,limit=999999)
         query['modificationhost__endswith'] = wnname
     else:
-        query = setupView(request,hours=hours,limit=999999)
+        query = setupView(request,hours=12,limit=999999)
     query['computingsite'] = site
     wnsummarydata = wnSummary(query)
     totstates = {}
@@ -2945,7 +2783,7 @@ def wnInfo(request,site,wnname='all'):
     for k in kys:
         wnPlotFinishedL.append( [ k, wnPlotFinished[k] ] )
 
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         xurl = extensibleURL(request)
         del request.session['TFIRST']
         del request.session['TLAST']
@@ -2969,44 +2807,16 @@ def wnInfo(request,site,wnname='all'):
         response = render_to_response('wnInfo.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del request.session['TFIRST']
         del request.session['TLAST']
-        data = {
-            'request' : request,
-            'viewParams' : request.session['viewParams'],
-            'requestParams' : request.session['requestParams'],
-            'url' : request.path,
-            'site' : site,
-            'wnname' : wnname,
-            'user' : None,
-            'summary' : fullsummary,
-            'wnPlotFailed' : wnPlotFailedL,
-            'wnPlotFinished' : wnPlotFinishedL,
-            'hours' : LAST_N_HOURS_MAX,
-            'errthreshold' : errthreshold,
-        }
-        return  HttpResponse(json.dumps(data, cls=DateTimeEncoder), mimetype='text/html')
+        resp = []
+        return  HttpResponse(json.dumps(resp), mimetype='text/html')
 
-def dashSummary(request, hours, limit=999999, view='all', cloudview='region', notime=True, preprocessParams=None):
+def dashSummary(request, hours, limit=999999, view='all', cloudview='region', notime=True):
     pilots = getPilotCounts(view)
-
-    if preprocessParams is None:
-        query = setupView(request,hours=hours,limit=limit,opmode=view)
-    else:
-        if 'modificationtime__range' in preprocessParams:
-            query = { 'modificationtime__range' : preprocessParams['modificationtime__range']}
-        else:
-            query = {}
-        if  'selectionParam' in preprocessParams:
-            selecttionParams = preprocessParams['selectionParam']
-            for papamKey,papamValue  in selecttionParams.iteritems():
-                if not papamKey.lower() == 'mode':
-                    query[papamKey.lower()] = papamValue
-            notime=False
-
-
-
+    query = setupView(request,hours=hours,limit=limit,opmode=view)
+    
     if VOMODE == 'atlas' and len(request.session['requestParams']) == 0:
         cloudinfol = Cloudconfig.objects.filter().exclude(name='CMS').exclude(name='OSG').values('name','status')
     else:
@@ -3176,9 +2986,8 @@ def dashSummary(request, hours, limit=999999, view='all', cloudview='region', no
 
     return fullsummary
 
-def dashTaskSummary(request, hours, limit=999999, view='all', query=None):
-    if query is None:
-        query = setupView(request,hours=hours,limit=limit,opmode=view)
+def dashTaskSummary(request, hours, limit=999999, view='all'):
+    query = setupView(request,hours=hours,limit=limit,opmode=view) 
     tasksummarydata = taskSummaryData(request, query)
     tasks = {}
     totstates = {}
@@ -3245,6 +3054,125 @@ def dashTaskSummary(request, hours, limit=999999, view='all', query=None):
         elif request.session['requestParams']['sortby'] == 'pctfail':
             fullsummary = sorted(fullsummary, key=lambda x:x['pctfail'],reverse=True)
     return fullsummary
+
+
+def preProcess(request):
+
+    ''' todo:
+    0. Decide tables structure and parameters aggregates approach
+    1. Get List of Jobs modified later than previosly saved last modified job
+    2. For each of them calculate output variables of Error summary.
+    Factorize using set of request parameters causing different flow.
+    3. Save new variables in the dedicated table in form - jobid ~ variable
+    4. When a new query comes, select from job tables correspondent ids.
+    5. Select variables from the transistent table.
+    6. Merge them and display output.
+
+    '''
+
+
+#    data = {}
+#    dashTaskSummary_preprocess(request)
+#    response = render_to_response('preprocessLog.html', data, RequestContext(request))
+#    patch_response_headers(response, cache_timeout=-1)
+
+    return None
+
+
+#class prepDashTaskSummary:
+
+
+
+
+
+
+def dashTaskSummary_preprocess(request):
+#    query = setupView(request,hours=hours,limit=limit,opmode=view)
+    query = { 'modificationtime__range' : [timezone.now() - timedelta(hours=LAST_N_HOURS_MAX), timezone.now()] }
+
+    tasksummarydata = []
+    querynotime = query
+    del querynotime['modificationtime__range']
+    tasksummarydata.extend(Jobsactive4.objects.filter(**querynotime).values('taskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
+    tasksummarydata.extend(Jobsdefined4.objects.filter(**querynotime).values('taskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
+    tasksummarydata.extend(Jobswaiting4.objects.filter(**querynotime).values('taskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'),  Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
+    tasksummarydata.extend(Jobsarchived4.objects.filter(**query).values('taskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
+    tasksummarydata.extend(Jobsactive4.objects.filter(**querynotime).values('jeditaskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('jeditaskid','jobstatus')[:request.session['JOB_LIMIT']])
+    tasksummarydata.extend(Jobsdefined4.objects.filter(**querynotime).values('jeditaskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('jeditaskid','jobstatus')[:request.session['JOB_LIMIT']])
+    tasksummarydata.extend(Jobswaiting4.objects.filter(**querynotime).values('jeditaskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('jeditaskid','jobstatus')[:request.session['JOB_LIMIT']])
+    tasksummarydata.extend(Jobsarchived4.objects.filter(**query).values('jeditaskid','jobstatus','computingsite','produsername','transexitcode','piloterrorcode','processingtype','prodsourcelabel').annotate(Count('jobstatus'), Count('computingsite'), Count('produsername'), Count('transexitcode'), Count('piloterrorcode'), Count('processingtype'), Count('prodsourcelabel')).order_by('jeditaskid','jobstatus')[:request.session['JOB_LIMIT']])
+
+
+    '''
+    tasks = {}
+    totstates = {}
+    totjobs = 0
+    for state in sitestatelist:
+        totstates[state] = 0
+
+    taskids = []
+    for rec in tasksummarydata:
+        if 'jeditaskid' in rec and rec['jeditaskid'] and rec['jeditaskid'] > 0:
+            taskids.append( { 'jeditaskid' : rec['jeditaskid'] } )
+        elif 'taskid' in rec and rec['taskid'] and rec['taskid'] > 0 :
+            taskids.append( { 'taskid' : rec['taskid'] } )
+    tasknamedict = taskNameDict(taskids)
+    for rec in tasksummarydata:
+        if 'jeditaskid' in rec and rec['jeditaskid'] and rec['jeditaskid'] > 0:
+            taskid = rec['jeditaskid']
+            tasktype = 'JEDI'
+        elif 'taskid' in rec and rec['taskid'] and rec['taskid'] > 0 :
+            taskid = rec['taskid']
+            tasktype = 'old'
+        else:
+            continue
+        jobstatus = rec['jobstatus']
+        count = rec['jobstatus__count']
+        if jobstatus not in sitestatelist: continue
+        totjobs += count
+        totstates[jobstatus] += count
+        if taskid not in tasks:
+            tasks[taskid] = {}
+            tasks[taskid]['taskid'] = taskid
+            if taskid in tasknamedict:
+                tasks[taskid]['name'] = tasknamedict[taskid]
+            else:
+                tasks[taskid]['name'] = str(taskid)
+            tasks[taskid]['count'] = 0
+            tasks[taskid]['states'] = {}
+            tasks[taskid]['statelist'] = []
+            for state in sitestatelist:
+                tasks[taskid]['states'][state] = {}
+                tasks[taskid]['states'][state]['name'] = state
+                tasks[taskid]['states'][state]['count'] = 0
+        tasks[taskid]['count'] += count
+        tasks[taskid]['states'][jobstatus]['count'] += count
+    if view == 'analysis':
+        ## Show only tasks starting with 'user.'
+        kys = tasks.keys()
+        for t in kys:
+            if not str(tasks[t]['name'].encode('ascii','ignore')).startswith('user.'): del tasks[t]
+    ## Convert dict to summary list
+    taskkeys = tasks.keys()
+    taskkeys.sort()
+    fullsummary = []
+    for taskid in taskkeys:
+        for state in sitestatelist:
+            tasks[taskid]['statelist'].append(tasks[taskid]['states'][state])
+        if tasks[taskid]['states']['finished']['count'] + tasks[taskid]['states']['failed']['count'] > 0:
+            tasks[taskid]['pctfail'] =  int(100.*float(tasks[taskid]['states']['failed']['count'])/(tasks[taskid]['states']['finished']['count']+tasks[taskid]['states']['failed']['count']))
+
+        fullsummary.append(tasks[taskid])
+    if 'sortby' in request.session['requestParams']:
+        if request.session['requestParams']['sortby'] in sitestatelist:
+            fullsummary = sorted(fullsummary, key=lambda x:x['states'][request.session['requestParams']['sortby']],reverse=True)
+        elif request.session['requestParams']['sortby'] == 'pctfail':
+            fullsummary = sorted(fullsummary, key=lambda x:x['pctfail'],reverse=True)
+    '''
+
+    return -1
+
+
 
 
 
@@ -3395,7 +3323,7 @@ def dashboard(request, view='production'):
             
             
     request.session['max_age_minutes'] = 6
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         xurl = extensibleURL(request)
         nosorturl = removeParam(xurl, 'sortby',mode='extensible')
         del request.session['TFIRST']
@@ -3430,11 +3358,11 @@ def dashboard(request, view='production'):
         response = render_to_response('dashboard.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del request.session['TFIRST']
         del request.session['TLAST']
         resp = []
-        return HttpResponse(json.dumps(resp), mimetype='text/html')
+        return  HttpResponse(json.dumps(resp), mimetype='text/html')
 
 from django.template.defaulttags import register
 @register.filter
@@ -3496,7 +3424,7 @@ def dashTasks(request, hours, view='production'):
         if cloud['name'] in rwData.keys():
             rw[cloud['name']] = rwData[cloud['name']]
 
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         xurl = extensibleURL(request)
         nosorturl = removeParam(xurl, 'sortby',mode='extensible')
         del request.session['TFIRST']
@@ -3526,18 +3454,11 @@ def dashTasks(request, hours, view='production'):
         response = render_to_response('dashboard.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del request.session['TFIRST']
         del request.session['TLAST']
-        remainingEvents = RemainedEventsPerCloud3dayswind.objects.values('cloud','nrem')
-        remainingEventsSet = {}
-        for remev in remainingEvents:
-            remainingEventsSet[remev['cloud']] = remev['nrem']
-        data = {
-            'jobsLeft' : jobsLeft,
-            'remainingWeightedEvents':remainingEventsSet,
-        }
-        return  HttpResponse(json.dumps(data), mimetype='text/html')
+        resp = []
+        return  HttpResponse(json.dumps(resp), mimetype='text/html')
 
 @csrf_exempt
 @cache_page(60*6)
@@ -3565,23 +3486,14 @@ def taskList(request):
     ntasks = len(tasks)
     nmax = ntasks
 
-#    if 'display_limit' not in request.session['requestParams']:
-#        display_limit = 300
-#        url_nolimit = request.get_full_path() +"&display_limit="+str(nmax)
-#    else:
-#        display_limit = int(request.session['requestParams']['display_limit'])
-#        nmax = display_limit
-#        url_nolimit = request.get_full_path() +"&display_limit="+str(nmax)
-
-
-    if 'display_limit' not in request.session['requestParams']:
-        display_limit = 300
-        url_nolimit = request.get_full_path() +"&display_limit="+str(nmax)
-    else:
+    if 'display_limit' in request.session['requestParams'] and int(request.session['requestParams']['display_limit']) < nmax:
         display_limit = int(request.session['requestParams']['display_limit'])
         nmax = display_limit
-        url_nolimit = request.get_full_path() +"&display_limit="+str(nmax)
-
+        url_nolimit = removeParam(request.get_full_path(), 'display_limit')
+    else:
+        display_limit = 300
+        nmax = display_limit
+        url_nolimit = request.get_full_path()
 
     #from django.db import connection
     #print 'SQL query:', connection.queries
@@ -3591,29 +3503,8 @@ def taskList(request):
     tquery = {}
     tquery['jeditaskid__in'] = tasksIdToBeDisplayed
     tasksEventInfo = GetEventsForTask.objects.filter(**tquery).values('jeditaskid','totevrem', 'totev')
-    failedInScouting = JediDatasets.objects.filter(**tquery).extra(where=['NFILESFAILED > NFILESTOBEUSED']).values('jeditaskid')
-
-    taskStatuses = dict((task['jeditaskid'], task['status']) for task in tasks)
-
-    failedInScouting = [ item['jeditaskid'] for item in failedInScouting if (taskStatuses[item['jeditaskid']] not in ('scouting'))]
-
-    #scoutingHasCritFailures
-    tquery['nfilesfailed__gt'] = 0
-    scoutingHasCritFailures = JediDatasets.objects.filter(**tquery).values('jeditaskid')
-    scoutingHasCritFailures = [ item['jeditaskid'] for item in scoutingHasCritFailures if (taskStatuses[item['jeditaskid']] in ('scouting'))]
-
-    tquery = {}
-    tquery['nfilesfailed'] = 0
-    tquery['jeditaskid__in'] = tasksIdToBeDisplayed
-    scoutingHasNonCritFailures = JediDatasets.objects.filter(**tquery).values('jeditaskid')
-    scoutingHasNonCritFailures = [ item['jeditaskid'] for item in scoutingHasNonCritFailures if (taskStatuses[item['jeditaskid']] == 'scouting' and item['jeditaskid'] not in scoutingHasCritFailures )]
-
-    tquery = {}
-    tquery['jeditaskid__in'] = scoutingHasNonCritFailures
-    tquery['relationtype'] = 'retry'
-    scoutingHasNonCritFailures = JediJobRetryHistory.objects.filter(**tquery).values('jeditaskid')
-    scoutingHasNonCritFailures = [ item['jeditaskid'] for item in scoutingHasNonCritFailures]
-
+    failedInScouting = JediDatasets.objects.filter(**tquery).extra(where=['nFiles > nFilesTobeUsed']).values('jeditaskid')
+    failedInScouting = [ item['jeditaskid'] for item in failedInScouting]
     for task in taskslToBeDisplayed:
         correspondendEventInfo = filter(lambda n: n.get('jeditaskid') == task['jeditaskid'], tasksEventInfo)
         if len(correspondendEventInfo) > 0:
@@ -3623,11 +3514,9 @@ def taskList(request):
             task['totevrem'] = 0
             task['totev'] = 0
         if (task['jeditaskid'] in failedInScouting):
-            task['failedscouting'] = True
-        if (task['jeditaskid'] in scoutingHasCritFailures):
-            task['scoutinghascritfailures'] = True
-        if (task['jeditaskid'] in scoutingHasNonCritFailures):
-            task['scoutinghasnoncritfailures'] = True
+                task['failedscouting'] = True
+        else:
+            task['failedscouting'] = False
 
     ## For event service, pull the jobs and event ranges
     if eventservice:        
@@ -3646,35 +3535,17 @@ def taskList(request):
         esjobs = []
         for job in jobs:
             esjobs.append(job['pandaid'])
-
-        random.seed()
-        tmpTableName = "ATLAS_PANDABIGMON.TMP_IDS1"
-        transactionKey = random.randrange(1000000)
-        connection.enter_transaction_management()
-        new_cur = connection.cursor()
-        for id in esjobs:
-            new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,id,transactionKey)) # Backend dependable
-        connection.commit()
-        new_cur.execute("SELECT PANDAID,STATUS FROM ATLAS_PANDA.JEDI_EVENTS WHERE PANDAID in (SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)" % (tmpTableName, transactionKey))
-        evtable = dictfetchall(new_cur)
-
-#        esquery = {}
-#        esquery['pandaid__in'] = esjobs
-#        evtable = JediEvents.objects.filter(**esquery).values('pandaid','status')
-
-        new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
-        new_cur.close()
-        connection.commit()
-        connection.leave_transaction_management()
-
+        esquery = {}
+        esquery['pandaid__in'] = esjobs
+        evtable = JediEvents.objects.filter(**esquery).values('pandaid','status')
 
         for ev in evtable:
-            taskid = taskdict[ev['PANDAID']]
+            taskid = taskdict[ev['pandaid']]
             if taskid not in estaskdict:
                 estaskdict[taskid] = {}
                 for s in eventservicestatelist:
                     estaskdict[taskid][s] = 0
-            evstat = eventservicestatelist[ev['STATUS']]
+            evstat = eventservicestatelist[ev['status']]
             estaskdict[taskid][evstat] += 1
         for task in tasks:
             taskid = task['jeditaskid']
@@ -3865,18 +3736,10 @@ def taskInfo(request, jeditaskid=0):
     nfiles = 0
     nfinished = 0
     nfailed = 0
-    neventsTot = 0
-    neventsUsedTot = 0
-
     if len(dsets) > 0:
         for ds in dsets:
             if ds['type'] not in ['input', 'pseudo_input' ]: continue
             if ds['masterid']: continue
-
-            if int(ds['nevents']) > 0:
-                neventsTot += int(ds['nevents'])
-                neventsUsedTot += int(ds['neventsused'])
-
             if int(ds['nfiles']) > 0:
                 nfiles += int(ds['nfiles'])
                 nfinished += int(ds['nfilesfinished'])
@@ -3935,36 +3798,15 @@ def taskInfo(request, jeditaskid=0):
         for job in jobs:
             esjobs.append(job['pandaid'])
         esquery = {}
-
-
-        tmpTableName = "ATLAS_PANDABIGMON.TMP_IDS1"
-        transactionKey = random.randrange(1000000)
-
-        connection.enter_transaction_management()
-        new_cur = connection.cursor()
-        for pandaid in esjobs:
-            new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,pandaid,transactionKey)) # Backend dependable
-        connection.commit()
-
-        new_cur.execute("SELECT PANDAID,STATUS FROM ATLAS_PANDA.JEDI_EVENTS WHERE PANDAID in (SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)" % (tmpTableName, transactionKey))
-        evtable = dictfetchall(new_cur)
-
-        new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
-        new_cur.close()
-        connection.commit()
-        connection.leave_transaction_management()
-
-#        esquery['pandaid__in'] = esjobs
-#        evtable = JediEvents.objects.filter(**esquery).values('pandaid','status')
-
-
+        esquery['pandaid__in'] = esjobs
+        evtable = JediEvents.objects.filter(**esquery).values('pandaid','status')
         for ev in evtable:
-            taskid = taskdict[ev['PANDAID']]
+            taskid = taskdict[ev['pandaid']]
             if taskid not in estaskdict:
                 estaskdict[taskid] = {}
                 for s in eventservicestatelist:
                     estaskdict[taskid][s] = 0
-            evstat = eventservicestatelist[ev['STATUS']]
+            evstat = eventservicestatelist[ev['status']]
             estaskdict[taskid][evstat] += 1
         if jeditaskid in estaskdict:
             estaskstr = ''
@@ -3973,45 +3815,8 @@ def taskInfo(request, jeditaskid=0):
                     estaskstr += " %s(%s) " % ( s, estaskdict[jeditaskid][s] )
             taskrec['estaskstr'] = estaskstr
 
-    '''
-    tquery = {}
-    tquery['jeditaskid'] = jeditaskid
-    tasksEventInfo = GetEventsForTask.objects.filter(**tquery).values('jeditaskid','totevrem', 'totev')
-    if len(tasksEventInfo) > 0:
-        taskrec['totev'] = tasksEventInfo[0]['totev']
-        taskrec['totevproc'] = tasksEventInfo[0]['totev'] - tasksEventInfo[0]['totevrem']
-        taskrec['pctfinished'] = (100*taskrec['totevproc']/taskrec['totev']) if (taskrec['totev'] > 0) else ''
-    else:
-        taskrec['totev'] = ''
-        taskrec['totevproc'] = ''
-        taskrec['pctfinished'] = ''
-    '''
-
-    taskrec['totev'] = neventsTot
-    taskrec['totevproc'] = neventsUsedTot
-    taskrec['pctfinished'] = (100*taskrec['totevproc']/taskrec['totev']) if (taskrec['totev'] > 0) else ''
-
     if request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
-        del tasks
-        del columns
-        del ds
-        taskrec['creationdate'] = taskrec['creationdate'].strftime(defaultDatetimeFormat)
-        taskrec['modificationtime'] = taskrec['modificationtime'].strftime(defaultDatetimeFormat)
-        taskrec['starttime'] = taskrec['starttime'].strftime(defaultDatetimeFormat)
-        taskrec['statechangetime'] = taskrec['statechangetime'].strftime(defaultDatetimeFormat)
-
-        for dset in dsets:
-            dset['creationtime'] = dset['creationtime'].strftime(defaultDatetimeFormat)
-            dset['modificationtime'] = dset['modificationtime'].strftime(defaultDatetimeFormat)
-            if dset['statechecktime'] is not None:
-                dset['statechecktime'] = dset['statechecktime'].strftime(defaultDatetimeFormat)
-
-        data = {
-            'task' : taskrec,
-            'taskparams' : taskparams,
-            'datasets' : dsets,
-        }
-
+        resp = []
         del request.session['TFIRST']
         del request.session['TLAST']
         return  HttpResponse(json.dumps(resp), mimetype='text/html') 
@@ -4151,7 +3956,7 @@ def jobStateSummary(jobs):
         statecount[job['jobstatus']] += 1
     return statecount
 
-def errorSummaryDict(request,jobs, tasknamedict, testjobs, preprocessParams = None):
+def errorSummaryDict(request,jobs, tasknamedict, testjobs):
     """ take a job list and produce error summaries from it """
     errsByCount = {}
     errsBySite = {}
@@ -4167,10 +3972,7 @@ def errorSummaryDict(request,jobs, tasknamedict, testjobs, preprocessParams = No
         if not testjobs:
             if job['jobstatus'] not in [ 'failed', 'holding' ]: continue
         site = job['computingsite']
-
-        if (preprocessParams is not None and 'selectionParam' in preprocessParams and 'cloud' in preprocessParams['selectionParam']):
-            if site in homeCloud and homeCloud[site] != preprocessParams['selectionParam']['cloud']: continue
-        elif ('cloud' in request.session['requestParams']):
+        if 'cloud' in request.session['requestParams']:
             if site in homeCloud and homeCloud[site] != request.session['requestParams']['cloud']: continue
         user = job['produsername']
         taskname = ''
@@ -4195,8 +3997,7 @@ def errorSummaryDict(request,jobs, tasknamedict, testjobs, preprocessParams = No
         ## Overall summary
         for f in flist:
             if job[f]:
-                if f == 'taskid' and job[f] < 1000000 and (((preprocessParams is None) and ('produsername' not in request.session['requestParams'])) or \
-                                                                   ((preprocessParams is not None) and ('selectionParam' in preprocessParams and 'produsername' not in preprocessParams['selectionParam']))):
+                if f == 'taskid' and job[f] < 1000000 and 'produsername' not in request.session['requestParams']:
                     pass
                 else:
                     if not f in sumd: sumd[f] = {}
@@ -4265,8 +4066,7 @@ def errorSummaryDict(request,jobs, tasknamedict, testjobs, preprocessParams = No
                 errsBySite[site]['errors'][errcode]['count'] += 1
                 errsBySite[site]['toterrors'] += 1
                 
-                if tasktype == 'jeditaskid' and taskid > 1000000 or (((preprocessParams is None) and ('produsername' in request.session['requestParams'])) or \
-                                                                   ((preprocessParams is not None) and ('selectionParam' in preprocessParams and 'produsername' in preprocessParams['selectionParam']))):
+                if tasktype == 'jeditaskid' or taskid > 1000000 or 'produsername' in request.session['requestParams']:
                     if taskid not in errsByTask:
                         errsByTask[taskid] = {}
                         errsByTask[taskid]['name'] = taskid
@@ -4376,99 +4176,60 @@ def getTaskName(tasktype,taskid):
 
 
 
-#@cache_page(60*6)
-def errorSummary(request, preprocessParams = None, justCheckJobs = False):
+@cache_page(60*6)
+def errorSummary(request):
+    valid, response = initRequest(request)
+    if not valid: return response
 
     testjobs = False
-    query = {}
-    if preprocessParams is None:
-        valid, response = initRequest(request)
-        if not valid: return response
-        if 'prodsourcelabel' in request.session['requestParams'] and request.session['requestParams']['prodsourcelabel'].lower().find('test') >= 0:
-            testjobs = True
-        jobtype = ''
-        if 'jobtype' in request.session['requestParams']:
-            jobtype = request.session['requestParams']['jobtype']
-        elif '/analysis' in request.path:
-            jobtype = 'analysis'
-        elif '/production' in request.path:
-            jobtype = 'production'
-        elif testjobs:
-            jobtype = 'rc_test'
+    if 'prodsourcelabel' in request.session['requestParams'] and request.session['requestParams']['prodsourcelabel'].lower().find('test') >= 0:
+        testjobs = True
 
-        if jobtype == '':
-            hours = 1
-#            hours = 3
-            limit = 6000
-        elif jobtype.startswith('anal'):
-            hours = 6
-            limit = 6000
-        else:
-            hours = 12
-            limit = 6000
+    jobtype = ''
+    if 'jobtype' in request.session['requestParams']:
+        jobtype = request.session['requestParams']['jobtype']
+    elif '/analysis' in request.path:
+        jobtype = 'analysis'
+    elif '/production' in request.path:
+        jobtype = 'production'
+    elif testjobs:
+        jobtype = 'rc_test'
 
-        if 'hours' in request.session['requestParams']:
-            hours = int(request.session['requestParams']['hours'])
-
-        if 'JOB_LIMIT' in request.session:
-            joblimit = request.session['JOB_LIMIT']
-        else:
-            joblimit = limit
-
-        query,wildCardExtension  = setupView(request, hours=hours, limit=limit, wildCardExt=True)
-
-
+    if jobtype == '':
+        hours = 3
+        limit = 6000
+    elif jobtype.startswith('anal'):
+        hours = 6
+        limit = 6000
     else:
-        if 'pandaids' not in preprocessParams:
-            testjobs = preprocessParams['testjobs']
-            query = { 'modificationtime__range' : preprocessParams['modificationtime__range']}
-            selecttionParams = preprocessParams['selectionParam']
-            for papamKey,papamValue in selecttionParams.iteritems():
-                if not papamKey.lower() == 'mode':
-                    query[papamKey.lower()] = papamValue
-        else:
-            query = { 'pandaid__in' : preprocessParams['pandaids']}
-        wildCardExtension = '1=1'
-        joblimit = 20000000
-        hours = 100000000
-        limit = 10
-        jobtype = ''
+        hours = 12
+        limit = 6000
 
-
-
+    if 'hours' in request.session['requestParams']:
+        hours = int(request.session['requestParams']['hours'])
+        
+    query,wildCardExtension  = setupView(request, hours=hours, limit=limit, wildCardExt=True)
 
     if not testjobs: query['jobstatus__in'] = [ 'failed', 'holding' ]
     jobs = []
-
-    if justCheckJobs:
-        values = 'pandaid', 'modificationtime'
-    else:
-        values = 'produsername', 'pandaid', 'cloud','computingsite','cpuconsumptiontime','jobstatus','transformation','prodsourcelabel','specialhandling','vo','modificationtime', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'currentpriority', 'computingelement'
+    values = 'produsername', 'pandaid', 'cloud','computingsite','cpuconsumptiontime','jobstatus','transformation','prodsourcelabel','specialhandling','vo','modificationtime', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'currentpriority', 'computingelement'
+    print "step3-1"
+    print str(datetime.now())
 
     if testjobs:
-        jobs.extend(Jobsdefined4.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
-        jobs.extend(Jobswaiting4.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
+        jobs.extend(Jobsdefined4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+        jobs.extend(Jobswaiting4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
 
-    jobs.extend(Jobsactive4.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
-    jobs.extend(Jobsarchived4.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
+    jobs.extend(Jobsactive4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+    jobs.extend(Jobsarchived4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
 
-    if 'modificationtime__range' in query:
-        if (((datetime.now() - datetime.strptime(query['modificationtime__range'][0], "%Y-%m-%d %H:%M:%S" )).days > 1) or \
-            ((datetime.now() - datetime.strptime(query['modificationtime__range'][1], "%Y-%m-%d %H:%M:%S" )).days > 1)):
-            jobs.extend(Jobsarchived.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
-    else:
-        jobs.extend(Jobsarchived.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
+    if (((datetime.now() - datetime.strptime(query['modificationtime__range'][0], "%Y-%m-%d %H:%M:%S" )).days > 1) or \
+        ((datetime.now() - datetime.strptime(query['modificationtime__range'][1], "%Y-%m-%d %H:%M:%S" )).days > 1)):
+        jobs.extend(Jobsarchived.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
 
-#    print "step3-1-0"
-#    print str(datetime.now())
+    print "step3-1-0"
+    print str(datetime.now())
 
-    if justCheckJobs == True:
-        return jobs
-
-
-    jobsIDs = []
-    for job in jobs:
-        jobsIDs.append(job['pandaid'])
 
     jobs = cleanJobList(request, jobs, mode='nodrop', doAddMeta = False)
 
@@ -4476,14 +4237,17 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
     njobs = len(jobs)
     tasknamedict = taskNameDict(jobs)
 
+    print "step3-1-1"
+    print str(datetime.now())
+
 
     ## Build the error summary.
-    errsByCount, errsBySite, errsByUser, errsByTask, sumd, errHist = errorSummaryDict(request,jobs, tasknamedict, testjobs, preprocessParams)
+    errsByCount, errsBySite, errsByUser, errsByTask, sumd, errHist = errorSummaryDict(request,jobs, tasknamedict, testjobs)
     ## Build the state summary and add state info to site error summary
     #notime = True
     #if testjobs: notime = False
     notime = False #### behave as it used to before introducing notime for dashboards. Pull only 12hrs.
-    statesummary = dashSummary(request, hours, limit=limit, view=jobtype, cloudview='region', notime=notime, preprocessParams=preprocessParams)
+    statesummary = dashSummary(request, hours, limit=limit, view=jobtype, cloudview='region', notime=notime)
     sitestates = {}
     savestates = [ 'finished', 'failed', 'cancelled', 'holding', ]
     for cloud in statesummary:
@@ -4504,7 +4268,11 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
     taskname = ''
     if not testjobs:
         ## Build the task state summary and add task state info to task error summary
-        taskstatesummary = dashTaskSummary(request, hours, limit=limit, view=jobtype, query=query)
+        print "step3-1-2"
+        print str(datetime.now())
+        taskstatesummary = dashTaskSummary(request, hours, limit=limit, view=jobtype)
+        print "step3-2"
+        print str(datetime.now())
 
         taskstates = {}
         for task in taskstatesummary:
@@ -4529,29 +4297,12 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
         sortby = 'alpha'
     flowstruct = buildGoogleFlowDiagram(request, jobs=jobs)
 
+    print "step3-3"
+    print str(datetime.now())
+
+
     request.session['max_age_minutes'] = 6
-
-
-    if (preprocessParams is not None):
-        data = {
-            'jobtype' : jobtype,
-            'njobs' : njobs,
-            'hours' : LAST_N_HOURS_MAX,
-            'user' : None,
-            'errsByCount' : errsByCount,
-            'errsBySite' : errsBySite,
-            'errsByUser' : errsByUser,
-            'errsByTask' : errsByTask,
-            'sumd' : sumd,
-            'errHist' : errHist,
-            'sortby' : sortby,
-            'taskname' : taskname,
-            'flowstruct' : flowstruct,
-            'jobsIDs': jobsIDs,
-        }
-        return data
-
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         nosorturl = removeParam(request.get_full_path(), 'sortby')
         xurl = extensibleURL(request)
         jobsurl = xurl.replace('/errors/','/jobs/')
@@ -4593,7 +4344,7 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
         response = render_to_response('errorSummary.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del request.session['TFIRST']
         del request.session['TLAST']
         resp = []
@@ -4709,7 +4460,7 @@ def incidentList(request):
     del request.session['TFIRST']
     del request.session['TLAST']
 
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         data = {
             'request' : request,
             'viewParams' : request.session['viewParams'],
@@ -4727,7 +4478,7 @@ def incidentList(request):
         response = render_to_response('incidents.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         clearedInc = []
         for inc in incidents:
             entry = {}
@@ -4859,97 +4610,15 @@ def pandaLogger(request):
         'hours' : hours,
         'getrecs' : getrecs,
     }
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         ##self monitor
         endSelfMonitor(request)
         response = render_to_response('pandaLogger.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         resp = data
         return  HttpResponse(json.dumps(resp), mimetype='text/html')
-
-
-def g4exceptions(request):
-    valid, response = initRequest(request)
-    setupView(request, hours=365*24, limit=999999999)
-    if 'hours' in request.session['requestParams']:
-        hours = int(request.session['requestParams']['hours'])
-    else:
-        hours = 3
-
-    #ATLASRELEASE , example:
-    #JOBPARAMSTABLE, JOBPARAMETERS, PANDAID, --AMITag=e4387
-
-    query,wildCardExtension  = setupView(request, hours=hours, wildCardExt=True)
-    query['jobstatus__in'] = [ 'failed', 'holding' ]
-    query['exeerrorcode'] = 68
-    query['exeerrordiag__icontains'] = 'G4 exception'
-    values = 'pandaid', 'atlasrelease',  'exeerrorcode', 'exeerrordiag', 'jobstatus', 'transformation'
-
-    jobs = []
-    jobs.extend(Jobsactive4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
-    jobs.extend(Jobsarchived4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
-    if (((datetime.now() - datetime.strptime(query['modificationtime__range'][0], "%Y-%m-%d %H:%M:%S" )).days > 1) or \
-        ((datetime.now() - datetime.strptime(query['modificationtime__range'][1], "%Y-%m-%d %H:%M:%S" )).days > 1)):
-        jobs.extend(Jobsarchived.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
-
-    if 'amitag' in request.session['requestParams']:
-        tmpTableName = "ATLAS_PANDABIGMON.TMP_IDS1"
-        transactionKey = random.randrange(1000000)
-        connection.enter_transaction_management()
-        new_cur = connection.cursor()
-        for job in jobs:
-            new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,job['pandaid'],transactionKey)) # Backend dependable
-        connection.commit()
-        new_cur.execute("SELECT JOBPARAMETERS, PANDAID FROM ATLAS_PANDA.JOBPARAMSTABLE WHERE PANDAID in (SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)" % (tmpTableName, transactionKey))
-        mrecs = dictfetchall(new_cur)
-        connection.commit()
-        connection.leave_transaction_management()
-        jobsToRemove = set()
-        for rec in mrecs:
-            acceptJob = True
-            parameters = rec['JOBPARAMETERS'].read()
-            tagName = "--AMITag"
-            startPos = parameters.find(tagName)
-            if startPos == -1:
-                acceptJob = False
-            endPos = parameters.find(" ", startPos)
-            AMITag = parameters[startPos+len(tagName)+1:endPos]
-            if AMITag != request.session['requestParams']['amitag']:
-                acceptJob = False
-            if acceptJob == False:
-                jobsToRemove.add(rec['PANDAID'])
-
-        jobs = filter(lambda x: not x['pandaid'] in jobsToRemove, jobs)
-
-
-
-    jobs = addJobMetadata(jobs, True)
-    errorFrequency = {}
-    errorJobs = {}
-
-    for job in jobs:
-        if (job['metastruct']['executor'][0]['logfileReport']['countSummary']['FATAL'] > 0):
-            message = job['metastruct']['executor'][0]['logfileReport']['details']['FATAL'][0]['message']
-            exceptMess = message[message.find("G4Exception :") + 14 : message.find("issued by :") -1 ]
-            if exceptMess not in errorFrequency:
-                errorFrequency[exceptMess] = 1
-            else:
-                errorFrequency[exceptMess] += 1
-
-            if exceptMess not in errorJobs:
-                errorJobs[exceptMess] = []
-                errorJobs[exceptMess].append(job['pandaid'])
-            else:
-                errorJobs[exceptMess].append(job['pandaid'])
-
-    resp = {'errorFrequency': errorFrequency, 'errorJobs':errorJobs}
-
-    del request.session['TFIRST']
-    del request.session['TLAST']
-    return  HttpResponse(json.dumps(resp), content_type='text/plain')
-
 
 @cache_page(60*6)
 def workingGroups(request):
@@ -5006,7 +4675,7 @@ def workingGroups(request):
         wgsummary.append(wgs[wg])
     if len(wgsummary) == 0: wgsummary = None
 
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         xurl = extensibleURL(request)
         del request.session['TFIRST']
         del request.session['TLAST']
@@ -5029,7 +4698,7 @@ def workingGroups(request):
         response = render_to_response('workingGroups.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del request.session['TFIRST']
         del request.session['TLAST']
         resp = []
@@ -5090,7 +4759,7 @@ def datasetInfo(request):
             columns.append(pair)
     del request.session['TFIRST']
     del request.session['TLAST']
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         data = {
             'request' : request,
             'viewParams' : request.session['viewParams'],
@@ -5105,7 +4774,7 @@ def datasetInfo(request):
         response = render_to_response('datasetInfo.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         return  HttpResponse(json.dumps(dsrec), mimetype='text/html')
 
 def datasetList(request):
@@ -5124,7 +4793,7 @@ def datasetList(request):
 
     del request.session['TFIRST']
     del request.session['TLAST']
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         data = {
             'viewParams' : request.session['viewParams'],
             'requestParams' : request.session['requestParams'],
@@ -5136,7 +4805,7 @@ def datasetList(request):
         response = render_to_response('datasetList.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         return  HttpResponse(json.dumps(dsrec), mimetype='text/html')
 
 def fileInfo(request):
@@ -5217,7 +4886,7 @@ def fileInfo(request):
             files = sorted(files, key=lambda k: (-k['jeditaskid'], k['startevent']))
 
 
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         data = {
             'request' : request,
             'viewParams' : request.session['viewParams'],
@@ -5233,7 +4902,7 @@ def fileInfo(request):
         response = render_to_response('fileInfo.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         return  HttpResponse(json.dumps(dsrec), mimetype='text/html')
 
 def fileList(request):
@@ -5275,7 +4944,7 @@ def fileList(request):
     nfiles = len(filed)
     del request.session['TFIRST']
     del request.session['TLAST']
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         data = {
             'request' : request,
             'viewParams' : request.session['viewParams'],
@@ -5289,7 +4958,7 @@ def fileList(request):
         response = render_to_response('fileList.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         return  HttpResponse(json.dumps(files), mimetype='text/html')
 
 @cache_page(60*6)
@@ -5307,7 +4976,7 @@ def workQueues(request):
 
     del request.session['TFIRST']
     del request.session['TLAST']
-    if ( not ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json')))  and ('json' not in request.session['requestParams'])):
+    if request.META.get('CONTENT_TYPE', 'text/plain') == 'text/plain':
         data = {
             'request' : request,
             'viewParams' : request.session['viewParams'],
@@ -5320,7 +4989,7 @@ def workQueues(request):
         response = render_to_response('workQueues.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    elif request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         return  HttpResponse(json.dumps(queues), mimetype='text/html')
 
 def stateNotUpdated(request, state='transferring', hoursSinceUpdate=36, values = standard_fields, count = False, wildCardExtension='(1=1)'):
@@ -5818,6 +5487,7 @@ def addJobMetadata(jobs, require = False):
     new_cur.execute("SELECT METADATA,MODIFICATIONTIME,PANDAID FROM ATLAS_PANDA.METATABLE WHERE PANDAID in (SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)" % (tmpTableName, transactionKey))
     mrecs = dictfetchall(new_cur)
 
+
     for m in mrecs:
         try:
             mdict[m['PANDAID']] = m['METADATA']
@@ -5832,7 +5502,6 @@ def addJobMetadata(jobs, require = False):
                 #job['metadata'] = mdict[job['pandaid']]
     print 'added metadata'
     new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
-    new_cur.close()
     connection.commit()
     connection.leave_transaction_management()
     return jobs
@@ -5889,710 +5558,3 @@ def endSelfMonitor(request):
             description=' '
     )
     reqs.save()
-
-
-
-
-
-def preProcess(request):
-
-    request.session['JOB_LIMIT'] = 1000000
-    ''' todo:
-    0. Decide tables structure and parameters aggregates approach
-    1. Get List of Jobs modified later than previosly saved last modified job
-    2. For each of them calculate output variables of Error summary.
-    Factorize using set of request parameters causing different flow.
-    3. Save new variables in the dedicated table in form - jobid ~ variable
-    4. When a new query comes, select from job tables correspondent ids.
-    5. Select variables from the transistent table.
-    6. Merge them and display output.
-
-
-
-SELECT JEDITASKID FROM ATLAS_PANDA.JOBSARCHIVED4 t1 WHERE t1.MODIFICATIONTIME >= TO_DATE('2015-08-15', 'YYYY-MM-DD')
-UNION
-SELECT JEDITASKID FROM ATLAS_PANDA.JOBSDEFINED4 t1 WHERE t1.MODIFICATIONTIME >= TO_DATE('2015-08-15', 'YYYY-MM-DD')
-UNION
-SELECT JEDITASKID FROM ATLAS_PANDA.Jobswaiting4 t1 WHERE t1.MODIFICATIONTIME >= TO_DATE('2015-08-15', 'YYYY-MM-DD')
-UNION
-SELECT JEDITASKID FROM ATLAS_PANDA.Jobsactive4 t1 WHERE t1.MODIFICATIONTIME >= TO_DATE('2015-08-15', 'YYYY-MM-DD')
-UNION
-SELECT JEDITASKID FROM ATLAS_PANDAARCH.Jobsarchived t1 WHERE t1.MODIFICATIONTIME >= TO_DATE('2015-08-15', 'YYYY-MM-DD')
-group by JEDITASKID
-
-()
-
-Then For each JEDITASKID do like errorSummary(request):
-
-Save result
-
-
-    '''
-
-
-
-
-
-#    fillPreprocessGroupTypes()
-
-    data = {}
-#    dashTaskSummary_preprocess(request)
-
-    if 'mode' in request.REQUEST:
-        if request.REQUEST['mode'] == 'master':
-            generateGroupsToTrocess(request)
-        elif request.REQUEST['mode'] == 'slave':
-            processGeneratedGroups(request)
-    response = render_to_response('preprocessLog.html', data, RequestContext(request))
-    patch_response_headers(response, cache_timeout=-1)
-
-    return response
-
-#class prepDashTaskSummary:
-
-
-
-def fillPreprocessGroupTypes():
-
-    sets = ['JEDITASKID,TASKID,PRODSOURCELABEL,CLOUD,COMPUTINGSITE', 'JEDITASKID,TASKID,PILOTERRORCODE,CLOUD,COMPUTINGSITE']
-
-    for set in sets:
-        grouptypeid = PreprocessGroupTypes.objects.count()
-        fields = set
-        page = '/errors/'
-        newRow = PreprocessGroupTypes(grouptypeid=grouptypeid, fields=fields, page=page)
-        newRow.save()
-
-def generateGroupPreprocessQuery(fields, startdate, enddate):
-
-    queryString = 'select * FROM (select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
-    queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDAARCH.JOBSARCHIVED t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
-    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
-    queryString += ' UNION'
-    queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
-    queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.JOBSARCHIVED4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
-    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
-    queryString += ' UNION'
-    queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
-    queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.Jobsactive4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
-    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
-    queryString += ' UNION'
-    queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
-    queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.Jobsdefined4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
-    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
-    queryString += ' UNION'
-    queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
-    queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.Jobswaiting4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
-    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields) + ')'
-    return queryString
-
-
-def generateGroupsToTrocess(request):
-    groupTypes = PreprocessGroupTypes.objects.all()
-    lastGroupBuildTime = cache.get('lastpreproccesstime')
-    if (lastGroupBuildTime is None) or (len(lastGroupBuildTime) == 0):
-        lastGroupBuildTime = timezone.now() - timedelta(hours=2) #in production replace by 14*24
-
-    for groupType in groupTypes:
-        enddate = timezone.now().strftime(defaultDatetimeFormat)
-        lastGroupBuildTime = lastGroupBuildTime.strftime(defaultDatetimeFormat)
-        fields = groupType.fields.split(',')
-        querystr = generateGroupPreprocessQuery(fields, lastGroupBuildTime, enddate)
-
-        if (groupType.page == '/errors/'):
-            querystr = querystr + " WHERE JOBSTATUS in ('failed','holding') OR PRODSOURCELABEL in ('prod_test', 'rc_test') "
-
-        new_cur = connection.cursor()
-        new_cur.execute(querystr)
-        mrecs = dictfetchall(new_cur)
-        new_cur.close()
-        random.seed()
-
-        class Object(object):
-            pass
-        skimmedRequest = Object()
-        skimmedRequest.session = copy.deepcopy(request.session)
-        #session
-
-
-        connection.enter_transaction_management()
-        for rec in mrecs:
-            del rec['FRESHESTJOB']
-            jsondata= zlib.compress(json.dumps(rec, cls=DateEncoder)).encode('base64')
-            if (PreprocessQueues.objects.filter(jsondata=jsondata).count() == 0):
-                newRow = PreprocessQueues(grouptypeid=groupType.grouptypeid,jsondata=jsondata)
-                newRow.save()
-        connection.commit()
-        connection.leave_transaction_management()
-
-
-            #data = doPreprocess(skimmedRequest, rec, groupType)
-            #print data
-
-
-# Here, for each group make JSON generation
-
-
-def processGeneratedGroups(request):
-    class Object(object):
-        pass
-    skimmedRequest = Object()
-    skimmedRequest.session = copy.deepcopy(request.session)
-
-    #PreprocessQueues.objects.filter(groupid=groupID).delete()
-
-    while True:
-        preptask = PreprocessQueues.objects.filter(timeprepstarted__isnull=True).order_by('?').first()
-        if preptask == None:
-            break
-
-        preptask.timeprepstarted = datetime.now().strftime(defaultDatetimeFormat)
-        preptask.save()
-
-        groupType = PreprocessGroupTypes.objects.filter(grouptypeid=preptask.grouptypeid).values()
-        prepTaskDescr = json.loads(zlib.decompress(preptask.jsondata.decode('base64')))
-        preptask.timeprepstarted = datetime.now().strftime(defaultDatetimeFormat)
-        preptask.save()
-        doPreprocess(skimmedRequest, prepTaskDescr, groupType[0])
-        try:
-            preptask.delete()
-        except:
-            pass
-
-
-def checkAlreadyPreProcessedJobs(paramSet):
-
-    # Add here check of queue
-
-    '''
-    The query to test:
-    SELECT GROUPID, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM (
-    SELECT count(GROUPID) as NUMCRIT, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPSKEYS WHERE (FIELDNAME='PRODSOURCELABEL' AND FIELDVALUE='managed') OR
-    (FIELDNAME='CLOUD' AND FIELDVALUE='US') OR (FIELDNAME='TASKID' AND FIELDVALUE='6212723') OR (FIELDNAME='JEDITASKID' AND FIELDVALUE='6212723')
-    OR (FIELDNAME='COMPUTINGSITE' AND FIELDVALUE='NIKHEF-ELPROD_LONG') OR (FIELDNAME='mode' AND FIELDVALUE='nodrop') GROUP BY GROUPID) t1
-    LEFT JOIN
-    (SELECT COUNT(GROUPID) as NUMCRIT1, GROUPID as GROUPID1 FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPSKEYS GROUP BY GROUPID)t2
-    on (t1.NUMCRIT = t2.NUMCRIT1 and t1.GROUPID = t2.GROUPID1)
-    LEFT JOIN
-    (SELECT GROUPID as GROUPID2, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPS)t3 ON t1.GROUPID = t3.GROUPID2
-    WHERE (NUMCRIT1 is not NULL) AND (GROUPID1 is not NULL)
-    '''
-
-
-    query = 'SELECT GROUPID, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM (SELECT count(GROUPID) as NUMCRIT, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPSKEYS WHERE '
-
-    counter = 0
-    maxcount = len(paramSet['selectionParam'])
-    for key, value in paramSet['selectionParam'].iteritems():
-        query +=  ' (FIELDNAME=\'%s\' AND FIELDVALUE=\'%s\') ' % (key,value)
-        counter += 1
-        if (counter < maxcount):
-            query +=' AND '
-
-
-    query += 'GROUP BY GROUPID) t1 LEFT JOIN (SELECT COUNT(GROUPID) as NUMCRIT1, GROUPID as GROUPID1 FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPSKEYS GROUP BY GROUPID)t2 on (t1.NUMCRIT = t2.NUMCRIT1 and t1.GROUPID = t2.GROUPID1) '
-    query += ' LEFT JOIN (SELECT GROUPID as GROUPID2, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPS)t3 ON t1.GROUPID = t3.GROUPID2 WHERE (NUMCRIT1 is not NULL) AND (GROUPID1 is not NULL)'
-    query += ' AND (TIMELOWERBOUND=TO_DATE(\'%s\', \'YYYY-MM-DD HH24:MI:SS\')) AND (TIMEUPPERBOUND=TO_DATE(\'%s\', \'YYYY-MM-DD HH24:MI:SS\'))' % (paramSet['modificationtime__range'][0], paramSet['modificationtime__range'][1])
-
-
-
-
-    try:
-        new_cur = connection.cursor()
-        new_cur.execute(query)
-        groupsids = dictfetchall(new_cur)
-    finally:
-        new_cur.close()
-
-    lastTimeUpdated = None
-    groupsidret = []
-
-    '''
-    if len(groupsids) > 0:
-        if 'LASTTIMEUPDATED' in groupsids:
-            lastTimeUpdated = 'LASTTIMEUPDATED'
-
-        for groupsid in groupsids:
-
-            jobsgroup = {}
-            jobsgroup['GROUPID'] = groupsid['GROUPID']
-            jobsgroup['lastTimeUpdated'] = lastTimeUpdated
-            query = {}
-            query['GROUPID'] = groupsid
-            jobsids = []
-            jobsids = PreprocessJobs.objects.filter(**query).values("PANDAID")
-            jobsgroup['jobsids'] = jobsids
-            groupsidret.append(jobsgroup)
-
-
-## We should return jobs, not groups
-
-
-
-    return groupsidret
-    '''
-    return 0
-
-
-
-def doPreprocess(request, rec, groupType):
-
-    '''
-    1. Compose query
-    2. For each function called from errorSummary call them as many times as flows depends on request parametes like view
-    3. Differ agregates as summ or one of sample
-
-    testjob = True,False
-    jobtype = 'analysis', 'production', 'rc_test'(in that case testjob = True)
-
-    query = []
-    + jobParamQuery = { 'modificationtime__range' : [startdate.strftime(defaultDatetimeFormat), enddate.strftime(defaultDatetimeFormat)] }
-    + paramsw from rec
-
-
-    pay attention:
-    errorSummaryDict, if 'cloud' in request.session['requestParams']; 'produsername' not in request.session['requestParams']
-    We should group by cloud.
-
-
-    def siteSummary
-    'cloud','computingsite'
-    We should group by cloud and computingsite. The rest in dashSummary should be Ok
-
-
-    def taskSummaryData
-    Summing over time
-        finished
-        cancelled
-    All rest one from all
-
-
-    For each criteria set at each time we should have only one job group in the DB. If job set changes, group should be updated
-
-    '''
-
-
-
-
-    if groupType['page'] == '/errors/':
-
-        #'cloud' in request.session['requestParams']
-        #'produsername' in request.session['requestParams']
-
-        sets = []
-        requestParams = {}
-        for key, value in rec.iteritems():
-            if not (key.lower() == 'timeupperbound' or key.lower() =='testjobs' or key.lower() =='freshestjob'):
-                requestParams[key] = value
-
-        requestParams['mode'] = 'nodrop'
-#        setattr(request.session, 'requestParams', requestParams)
-
-        timelowerbound = datetime.strptime(rec['TIMEUPPERBOUND'], "%Y-%m-%dT%H:%M:%S") - timedelta(hours=1)
-
-#        sets.append({'testjobs': True, 'jobtype':'rc_test', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
-#        sets.append({'testjobs': False, 'jobtype':'analysis', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
-#        sets.append({'testjobs': False, 'jobtype':'production','selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)]})
-
-        if rec['PRODSOURCELABEL'] in  ('prod_test', 'rc_test'):
-            testjobs = True
-        else:
-            testjobs = False
-
-        rec['TIMEUPPERBOUND'] = datetime.strptime(rec['TIMEUPPERBOUND'], "%Y-%m-%dT%H:%M:%S")
-        sets.append({'testjobs': testjobs, 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
-
-
-     #  sets.append({'testjobs': True, 'jobtype':'rc_test', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
-     #   sets.append({'testjobs': False, 'jobtype':'analysis', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
-     #   sets.append({'testjobs': False, 'jobtype':'production','selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)]})
-
-#        requestKeep = copy.deepcopy(request)
-        for paramSet in sets:
-
-            requestlocal = copy.deepcopy(request)
-            requestlocal.session['requestParams'] = requestParams
-            startTime = datetime.now().strftime(defaultDatetimeFormat)
-
-            jobsWillBeProcessed = errorSummary(requestlocal, paramSet, justCheckJobs=True)
-
-# We should split all jobs into groups by time interval. Then we should compare only corresponded groups. There should no more than only one corresponded group in the DB.
-# If there no corresponded group we just preprocess that group. If it is there, we check lenght and compare jobs ids. If there is some discrepancy we delete old group and generate a new one.
-
-
-#            groupsAlreadyProcessed = checkAlreadyPreProcessedJobs(paramSet)
-            groupsAlreadyProcessed=[]
-
-            jobsWillBeProcessedhash = {}
-            for job in jobsWillBeProcessed:
-                jobsWillBeProcessedhash[job['pandaid']] = job['modificationtime']
-
-            toProcess = False
-            groupID = -1
-            if groupsAlreadyProcessed:
-                group = groupsAlreadyProcessed[0] # Should be only one
-# Here we check equivalency of already preprocessed group of jobs and group to be shown now
-
-                groupID = group['GROUPID']
-                theGroupShouldBeUpdated = True
-                if len(jobsWillBeProcessedhash) == len(group['jobsids']):
-                    for jobid, modificationTime in jobsWillBeProcessedhash.iteritems():
-                        if jobid not in group['jobsids']: # we already applied restriction of the modification time in both queries so we don't check it now
-                            theGroupShouldBeUpdated = True
-                            break
-                else:
-                    theGroupShouldBeUpdated = True
-            else:
-                 toProcess = True
-            if not (toProcess or theGroupShouldBeUpdated):
-                continue
-
-
-            data = errorSummary(requestlocal, paramSet )
-
-            newGroupID = getNextPK('ATLAS_PANDABIGMON.PREPROCESS_GROUPS_SEQ')
-
-            newJobsGroup = PreprocessGroups(
-                groupid = newGroupID,
-                grouptypeid = groupType['grouptypeid'],
-                timelowerbound = timelowerbound,
-                timeupperbound = rec['TIMEUPPERBOUND'],
-                lasttimeupdated = startTime,
-                jsondata = zlib.compress(json.dumps(data, cls=DateEncoder)).encode('base64')
-            );
-            newJobsGroup.save()
-
-#bin = zlib.decompress(blobby.blob.decode('base64'))
-
-
-            for key, value in requestParams.iteritems():
-                newParamSet = PreprocessKeys(
-                    groupid = newGroupID,
-                    fieldname = key,
-                    fieldvalue = value
-                )
-                newParamSet.save()
-
-            for job in data['jobsIDs']:
-                newJob = PreprocessJobs(
-                    groupid = newGroupID,
-                    pandaid = job
-                )
-                newJob.save()
-
-            if groupID > 0 and theGroupShouldBeUpdated:
-                PreprocessGroups.objects.filter(groupid=groupID).delete()
-
-    return 0
-
-
-def getNextPK(pSequenceName):
-
-    query = "SELECT %s.nextval FROM dual" % pSequenceName
-    try:
-        new_cur = connection.cursor()
-        new_cur.execute(query)
-        groupsids = dictfetchall(new_cur)
-    finally:
-        new_cur.close()
-
-    return groupsids[0]['NEXTVAL']
-
-
-
-
-
-def mergePreprocessedData(dataToMerge):
-
-    mergedData = {}
-    merrHist = {}
-    merrsByCount = {}
-    merrsBySite = {}
-    merrsByTask = {}
-    merrsByUser = {}
-    mjobsIDs = {}
-    mnjobs = 0
-    mtaskname = []
-    msumd = {}
-
-
-    for itemToMerge in dataToMerge:
-        for key, value in itemToMerge.iteritems():
-            if key == 'errHist':
-                for entry in value:
-                    if entry[0] in merrHist:
-                        merrHist[entry[0]] += entry[1]
-                    else:
-                        merrHist[entry[0]] = entry[1]
-
-            if key == 'errsByCount':
-                if value[0]['error'] not in merrsByCount:
-                    merrsByCount[value[0]['error']] = value[0]
-                else:
-                    merrsByCount[value[0]['error']]['count'] += 1
-
-
-            if key == 'errsBySite':
-                '''
-                [{'toterrors': 3, 'errors': {'transformation:40': {'count': 3, 'diag': '', 'codename': 'transexitcode', 'codeval': 40, 'error': 'transformation:40'}},
-                'toterrjobs': 3, 'name': u'ANALY_BNL_LONG', 'errorlist':
-                [{'count': 3, 'diag': '', 'codename': 'transexitcode', 'codeval': 40, 'error': 'transformation:40'}]}]
-                '''
-                print value[0]['name']
-                if value[0]['name'] not in merrsBySite:
-                    merrsBySite[value[0]['name']] = value[0]
-                else:
-                    # 1. Merge errors
-                    addingError = value[0]['errors']
-                    for keyE, valueE in addingError.iteritems():
-                        if keyE in merrsBySite[value[0]['name']]['errors']:
-                            merrsBySite[value[0]['name']]['errors'][keyE]['count'] += addingError[keyE]['count']
-                        else:
-                            merrsBySite[value[0]['name']]['errors'][keyE] = addingError[keyE]
-
-                    # 2. Merge errorlist
-                    #Since the content is dublicating we do not merge it, just copy errors set
-                    errorlist = []
-                    for nKey, nValue in merrsBySite[value[0]['name']]['errors'].iteritems():
-                        errorlist.append(nValue)
-
-                    merrsBySite[value[0]['name']]['errorlist'] = errorlist
-                    merrsBySite[value[0]['name']]['toterrors'] += value[0]['toterrors']
-                    merrsBySite[value[0]['name']]['toterrjobs'] += value[0]['toterrjobs']
-
-            if key == 'errsByTask':
-                '''
-                [{'tasktype': 'jeditaskid', 'toterrors': 152, 'errorlist': [{'count': 76, 'diag': u'Get error: Staging input file failed', 'codename': 'piloterrorcode', 'codeval': 1099, 'error': 'pilot:1099'}, {'count': 76, 'diag': u'retrying at the same site. new PandaID=2608688432', 'codename': 'taskbuffererrorcode', 'codeval': 107, 'error': 'taskbuffer:107'}], 'finished': 0, 'errors': {'taskbuffer:107': {'count': 76, 'diag': u'retrying at the same site. new PandaID=2608688432', 'codename': 'taskbuffererrorcode', 'codeval': 107, 'error': 'taskbuffer:107'}, 'pilot:1099': {'count': 76, 'diag': u'Get error: Staging input file failed', 'codename': 'piloterrorcode', 'codeval': 1099, 'error': 'pilot:1099'}}, 'name': 6502978, 'pctfail': 100, 'failed': 237, 'toterrjobs': 76, 'holding': 0, 'longname': u'user.mgignac.410000.PowhegPythiaEvtGen_P2012_ttbar_hdamp172p5_nonallhad_MuonTreeDumper_v11/', 'cancelled': 0}]
-
-                'cancelled' 'errorlist' 'errors' : 'pilot:1099', 'taskbuffer:107'
-'failed' 'finished' 'holding' 'longname' 'name' 'pctfail' 'tasktype' 'toterrjobs' 'toterrors'
-                '''
-                if len(value) > 0:
-                    if value[0]['name'] not in merrsByTask:
-                        merrsByTask[value[0]['name']] = value[0]
-                    else:
-
-#                        'toterrors' 'errors' 'errorlist'
-                        merrsByTask[value[0]['name']]['cancelled'] += value[0]['cancelled']
-                        merrsByTask[value[0]['name']]['failed'] += value[0]['failed']
-                        merrsByTask[value[0]['name']]['holding'] += value[0]['holding']
-                        merrsByTask[value[0]['name']]['toterrjobs'] += value[0]['toterrjobs']
-                        merrsByTask[value[0]['name']]['toterrors'] += value[0]['toterrors']
-
-                        addingError = value[0]['errors']
-                        for keyE, valueE in addingError.iteritems():
-                            if keyE in merrsByTask[value[0]['name']]['errors']:
-                                merrsByTask[value[0]['name']]['errors'][keyE]['count'] += valueE['count']
-                            else:
-                                merrsByTask[value[0]['name']]['errors'][keyE] = valueE[keyE]
-
-                        # 2. Merge errorlist
-                        #Since the content is dublicating we do not merge it, just copy errors set
-                        errorlist = []
-                        for nKey, nValue in merrsByTask[value[0]['name']]['errors'].iteritems():
-                            errorlist.append(nValue)
-
-
-            if key == 'errsByUser':
-                if len(value) > 0:
-                    if value[0]['name'] not in merrsByUser:
-                        merrsByUser[value[0]['name']] = value[0]
-                    else:
-                        merrsByUser[value[0]['name']]['toterrors'] += value[0]['toterrors']
-
-                        addingError = value[0]['errors']
-                        for keyE, valueE in addingError.iteritems():
-                            if keyE in merrsByUser[value[0]['name']]['errors']:
-                                merrsByUser[value[0]['name']]['errors'][keyE]['count'] += addingError[keyE]['count']
-                            else:
-                                merrsByUser[value[0]['name']]['errors'][keyE] = addingError[keyE]
-
-                        # 2. Merge errorlist
-                        #Since the content is dublicating we do not merge it, just copy errors set
-                        errorlist = []
-                        for nKey, nValue in merrsByUser[value[0]['name']]['errors'].iteritems():
-                            errorlist.append(nValue)
-
-# Should be addressed and understood
-#            if key == 'flowstruct':
-#                pass
-
-            if key == 'jobsIDs':
-                if 'jobsIDs' not in mjobsIDs:
-                    mjobsIDs = value
-                else:
-                    mjobsIDs.extend(value)
-
-            if key == 'njobs':
-                mnjobs += value
-            if key == 'sumd':
-#[{'field': 'cloud', 'list': [{'kname': u'US', 'kvalue': 3}]}, {'field': 'computingsite', 'list': [{'kname': u'ANALY_BNL_LONG', 'kvalue': 3}]}, {'field': 'jobstatus', 'list': [{'kname': u'failed', 'kvalue': 3}]}, {'field': 'processingtype', 'list': [{'kname': u'gangarobot', 'kvalue': 3}]}, {'field': 'prodsourcelabel', 'list': [{'kname': u'user', 'kvalue': 3}]}, {'field': 'produsername', 'list': [{'kname': u'gangarbt', 'kvalue': 3}]}, {'field': 'transformation', 'list': [{'kname': u'runAthena-00-00-11', 'kvalue': 3}]}]
-
-                tmpDict = {}
-                for item in value:
-                    tmpInternalDict = {}
-
-                    for nextStepDict in item['list']:
-                        tmpInternalDict[ nextStepDict['kname'] ] = nextStepDict['kvalue']
-
-                    tmpDict[item['field']] = tmpInternalDict
-
-                for nKey, nVal in tmpDict.iteritems():
-                    if nKey in msumd:
-                        dictToProc = tmpDict[nKey]
-                        for nnKey, nnVal in dictToProc.iteritems():
-                            if nnKey in msumd[nKey]:
-                                msumd[nKey][nnKey] += dictToProc[nnKey]
-                            else:
-                                msumd[nKey][nnKey] = dictToProc[nnKey]
-                    else:
-                        msumd[nKey] = nVal
-
-                pass
-            if key == 'taskname':
-                mtaskname.extend(value)
-                pass
-#            if key == 'user':
-#                pass
-
-    mergedData['errHist'] = merrHist
-
-    mergedData['errsByCount'] = []
-    for key, value in merrsByCount.iteritems():
-        mergedData['errsByCount'].append(value)
-
-    mergedData['errsBySite'] = []
-    for key, value in merrsBySite.iteritems():
-        mergedData['errsBySite'].append(value)
-
-    mergedData['errsByTask'] = []
-    for key, value in merrsByTask.iteritems():
-        mergedData['errsByTask'].append(value)
-
-    mergedData['errsByUser'] = []
-    for key, value in merrsByUser.iteritems():
-        mergedData['errsByUser'].append(value)
-
-    mergedData['jobsIDs']=mjobsIDs
-    mergedData['njobs']=mnjobs
-    mergedData['taskname']=mtaskname
-
-    print msumd
-#    mergedData = dataToMerge
-    print mergedData
-    return mergedData
-
-
-def errorSummary2(request, preprocessParams = None, justCheckJobs = False):
-
-
-    jobs = errorSummary(request, preprocessParams = None, justCheckJobs = True)
-    tmpTableName = "ATLAS_PANDABIGMON.TMP_IDS1DEBUG"
-    transactionKey = random.randrange(1000000)
-
-    '''
-    SELECT GROUPID, COUNTS, PANDAID FROM
-(SELECT GROUPID1, counts  FROM
-(SELECT GROUPID as GROUPID1, count(GROUPID) as counts FROM PREPROCESS_JOBS WHERE ID in (53521, 53522, 53523, 53524, 53525, 53526, 53527, 53528,
-53529, 53530, 53531, 53532, 53533, 53534, 53535, 53536, 53537, 53538, 53539, 53540, 53541, 53610) GROUP BY GROUPID) t1
-LEFT JOIN
-(SELECT count(*) as countsall, GROUPID FROM PREPROCESS_JOBS GROUP BY GROUPID) t2
-ON (t2.GROUPID=t1.GROUPID1) and (countsall=counts)
-WHERE (countsall is not null) ORDER BY COUNTS DESC) t3
-
-LEFT JOIN (SELECT PANDAID, GROUPID FROM PREPROCESS_JOBS) t4
-ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID;
-
-
-    '''
-
-
-    data = None
-
-    jobsids = []
-    for job in jobs:
-        jobsids.append(job['pandaid'])
-
-#    connection.enter_transaction_management()
-
-    try:
-        new_cur = connection.cursor()
-        for id in jobsids:
-            new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,id,transactionKey)) # Backend dependable
-        connection.commit()
-
-        query = 'SELECT GROUPID, COUNTS, PANDAID FROM (SELECT GROUPID1, counts  FROM (SELECT GROUPID as GROUPID1, count(GROUPID) as counts FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS WHERE PANDAID in '
-        query += '( SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)' % (tmpTableName, transactionKey)
-        query += """ GROUP BY GROUPID) t1 LEFT JOIN (SELECT count(*) as countsall, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS GROUP BY GROUPID) t2 ON (t2.GROUPID=t1.GROUPID1) and (countsall=counts) WHERE (countsall is not null) ORDER BY COUNTS DESC) t3 LEFT JOIN (SELECT PANDAID, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS) t4 ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID """
-
-        new_cur.execute(query)
-        mrecs = dictfetchall(new_cur)
-    finally:
-        new_cur.close()
-
-#    connection.leave_transaction_management()
-
-
-    groups = {}
-    for rec in mrecs:
-        groupid = rec['GROUPID']
-        if groups.has_key(groupid):
-           groups[groupid].append(rec['PANDAID'])
-        else:
-            pandaids = [rec['PANDAID']]
-            groups[groupid] = pandaids
-
-    jobsPreprocessed = []
-    usedGroups = []
-    for groupid, pandaids in groups.iteritems():
-        if len(set(jobsPreprocessed).intersection(pandaids)) == 0 :
-            jobsPreprocessed.extend(pandaids)
-            usedGroups.append(groupid)
-
-
-    for jobsid in jobsPreprocessed:
-        jobsids.remove(jobsid)
-
-    paramSet = {'pandaids':jobsids}
-    request.session['requestParams']['pandaid'] = ', '.join(str(x) for x in jobsids)
-    data = errorSummary(request, paramSet )
-
-
-    tmpTableName = "ATLAS_PANDABIGMON.TMP_IDS1"
-    transactionKey = random.randrange(1000000)
-    connection.enter_transaction_management()
-    new_cur = connection.cursor()
-    for id in usedGroups:
-        new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,id,transactionKey)) # Backend dependable
-    connection.commit()
-    new_cur.execute("SELECT JSONDATA FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPS WHERE GROUPID in (SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)" % (tmpTableName, transactionKey))
-    mrecs = dictfetchall(new_cur)
-
-
-    dataToMerge = []
-    dataToMerge.append(data)
-
-    for rec in mrecs:
-        data = json.loads(zlib.decompress(rec['JSONDATA'].decode('base64')))
-        dataToMerge.append(data)
-
-
-
-
-    data=mergePreprocessedData(dataToMerge)
-
-
-
-
-    del request.session['TFIRST']
-    del request.session['TLAST']
-    del request.session['requestParams']['pandaid']
-    response = render_to_response('errorSummary.html', data, RequestContext(request))
-    patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
-    return response
-
