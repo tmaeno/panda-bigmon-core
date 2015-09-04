@@ -299,7 +299,7 @@ def setupView(request, opmode='', hours=0, limit=-99, querytype='job', wildCardE
     wildSearchFields = []
     for field in Jobsactive4._meta.get_all_field_names():
         if (Jobsactive4._meta.get_field(field).get_internal_type() == 'CharField'):
-            if not field == 'jobstatus':
+            if not (field == 'jobstatus' or field == 'modificationhost'):
                 wildSearchFields.append(field)
     
     deepquery = False
@@ -629,8 +629,13 @@ def setupView(request, opmode='', hours=0, limit=-99, querytype='job', wildCardE
 def cleanJobList(request, jobl, mode='nodrop', doAddMeta = True):
     if request is not None:
         if 'mode' in request.session['requestParams'] and request.session['requestParams']['mode'] == 'drop': mode='drop'
+    doAddMetaStill = False
+    if 'fields' in request.session['requestParams']:
+        fields = request.session['requestParams']['fields'].split("|")
+        if 'metastruct' in fields:
+            doAddMetaStill = True
     if doAddMeta:
-        jobs = addJobMetadata(jobl)
+        jobs = addJobMetadata(jobl, doAddMetaStill)
     else:
         jobs = jobl
     for job in jobs:
@@ -5413,11 +5418,11 @@ def dictfetchall(cursor):
 
 # This function created backend dependable for avoiding numerous arguments in metadata query.
 # Transaction and cursors used due to possible issues with django connection pooling
-def addJobMetadata(jobs):
+def addJobMetadata(jobs, require = False):
     print 'adding metadata'
     pids = []
     for job in jobs:
-        if job['jobstatus'] == 'failed': pids.append(job['pandaid'])
+        if (job['jobstatus'] == 'failed' or require): pids.append(job['pandaid'])
     query = {}
     query['pandaid__in'] = pids
     mdict = {}
@@ -5436,13 +5441,13 @@ def addJobMetadata(jobs):
 
     for m in mrecs:
         try:
-            mdict[m['pandaid']] = m['metadata']
+            mdict[m['PANDAID']] = m['METADATA']
         except:
             pass
     for job in jobs:
         if job['pandaid'] in mdict:
             try:
-                job['metastruct'] = json.loads(mdict[job['pandaid']])
+                job['metastruct'] = json.loads(mdict[job['pandaid']].read())
             except:
                 pass
                 #job['metadata'] = mdict[job['pandaid']]
