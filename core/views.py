@@ -5637,7 +5637,6 @@ def checkAlreadyPreProcessedJobs(paramSet):
     LEFT JOIN
     (SELECT GROUPID as GROUPID2, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPS)t3 ON t1.GROUPID = t3.GROUPID2
     WHERE (NUMCRIT1 is not NULL) AND (GROUPID1 is not NULL)
-    2. GET LOWER AND UPPER bounds and last time updated from PREPROCESS_GROUPS for corresponded GROUPIDs
     '''
 
     query = 'SELECT GROUPID, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM (SELECT count(GROUPID) as NUMCRIT, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPSKEYS WHERE '
@@ -5653,6 +5652,8 @@ def checkAlreadyPreProcessedJobs(paramSet):
 
     query += 'GROUP BY GROUPID) t1 LEFT JOIN (SELECT COUNT(GROUPID) as NUMCRIT1, GROUPID as GROUPID1 FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPSKEYS GROUP BY GROUPID)t2 on (t1.NUMCRIT = t2.NUMCRIT1 and t1.GROUPID = t2.GROUPID1) '
     query += ' LEFT JOIN (SELECT GROUPID as GROUPID2, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPS)t3 ON t1.GROUPID = t3.GROUPID2 WHERE (NUMCRIT1 is not NULL) AND (GROUPID1 is not NULL)'
+    query += ' AND (TIMELOWERBOUND=TO_DATE(\'%s\', \'YYYY-MM-DD HH24:MI:SS\')) AND (TIMEUPPERBOUND=TO_DATE(\'%s\', \'YYYY-MM-DD HH24:MI:SS\'))' % (paramSet['modificationtime__range'][0], paramSet['modificationtime__range'][1])
+
 
     new_cur = connection.cursor()
     new_cur.execute(query)
@@ -5677,10 +5678,6 @@ def checkAlreadyPreProcessedJobs(paramSet):
             jobsgroup['jobsids'] = jobsids
             groupsidret.append(jobsgroup)
 
-        print "groupsidret"
-        print groupsidret
-        print groupsids
-        exit(1)
 
 ## We should return jobs, not groups
 
@@ -5720,6 +5717,9 @@ def doPreprocess(request, rec, groupType):
         cancelled
     All rest one from all
 
+
+    For each criteria set at each time we should have only one job group in the DB. If job set changes, group should be updated
+
     '''
 
 
@@ -5753,18 +5753,39 @@ def doPreprocess(request, rec, groupType):
             startTime = datetime.now().strftime(defaultDatetimeFormat)
 
             jobsWillBeProcessed = errorSummary(requestlocal, paramSet, justCheckJobs=True)
-            jobsAlreadyProcessed = checkAlreadyPreProcessedJobs(paramSet)
 
-            toProcess = True
-            
-            if len(jobsWillBeProcessed) == len(jobsAlreadyProcessed):
-                for jobWillAllr in jobsWillBeProcessed:
-                    if jobsWillBeProcessed['pandaid'] in jobsAlreadyProcessed:
-                        if jobsWillBeProcessed['modificationtime'] > lasttimeProcessed:
-                            toProcess = False
+# We should split all jobs into groups by time interval. Then we should compare only corresponded groups. There should no more than only one corresponded group in the DB.
+# If there no corresponded group we just preprocess that group. If it is there, we check lenght and compare jobs ids. If there is some discrepancy we delete old group and generate a new one.
+
+            groupsAlreadyProcessed = checkAlreadyPreProcessedJobs(paramSet)
+
+            jobsWillBeProcessedhash = {}
+            for job in jobsWillBeProcessed:
+                jobsWillBeProcessedhash[job['pandaid']] = job['modificationtime']
+
+            toProcess = False
+            groupID = -1
+
+            if groupsAlreadyProcessed:
+                group = groupsAlreadyProcessed[0] # Should be only one
+# Here we check equivalency of already preprocessed group of jobs and group to be shown now
+
+                groupID = group['GROUPID']
+
+                theGroupShouldBeUpdated = True
+
+                if len(jobsWillBeProcessedhash) == len(group['jobsids']):
+                    for jobid, modificationTime in jobsWillBeProcessedhash.iteritems():
+                        if jobid not in group['jobsids']: # we already applied restriction of the modification time in both queries so we don't check it now
+                            theGroupShouldBeUpdated = True
                             break
+                else:
+                    theGroupShouldBeUpdated = True
 
-            if toProcess == False:
+            else:
+                 toProcess = True
+
+            if not (toProcess or theGroupShouldBeUpdated):
                 continue
 
             data = errorSummary(requestlocal, paramSet )
@@ -5796,38 +5817,8 @@ def doPreprocess(request, rec, groupType):
                 )
                 newJob.save()
 
-
-
-
-
-
-
-            '''
-
-
-
-                qduration=str(timezone.now())
-    request.session['qduration'] = qduration
-
-    try:
-        duration = (datetime.strptime(request.session['qduration'], "%Y-%m-%d %H:%M:%S.%f") - datetime.strptime(request.session['qtime'], "%Y-%m-%d %H:%M:%S.%f")).seconds
-    except:
-        duration =0
-    reqs = RequestStat(
-            server = request.session['hostname'],
-            qtime = request.session['qtime'],
-            load = request.session['load'],
-            mem = request.session['mem'],
-            qduration = request.session['qduration'],
-            duration = duration,
-            remote = request.session['remote'],
-            urls = request.session['urls'],
-            description=' '
-    )
-    reqs.save()
-
-
-            '''
+            if groupID > 0 and theGroupShouldBeUpdated:
+                PreprocessGroups.objects.filter(groupid=groupID).delete()
 
     return 0
 
