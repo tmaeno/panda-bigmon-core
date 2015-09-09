@@ -81,6 +81,5 @@ urlpatterns = patterns('',
 
 ) + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
-
 #urlpatterns += common_patterns
 #urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
