@@ -6056,3 +6056,15 @@ def errorSummary2(request, preprocessParams = None, justCheckJobs = False):
         return  HttpResponse(json.dumps(resp), mimetype='text/html')
 
 
+'''
+1. We shall get jobs ids.
+2. Cover that jobs ids by preproprocessed data. Get not preprocessed jobs ids.
+3. Implement stage 2 of the error page - computation of aggregates using only given (non preprocessed jobs)
+4. Implement data merging.
+
+
+'''
+
+
+
+
