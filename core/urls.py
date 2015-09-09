@@ -48,7 +48,7 @@ urlpatterns = patterns('',
     url(r'^datasetList/$', coremon_views.datasetList, name='datasetList'),
     url(r'^workQueues/$', coremon_views.workQueues, name='workQueues'),
     url(r'^preprocess/$', coremon_views.preProcess, name='preprocess'),
-    url(r'^errors/$', coremon_views.errorSummary2, name='errorSummary2'),
+    url(r'^errors2/$', coremon_views.errorSummary2, name='errorSummary2'),
 
 #    url(r'^preprocessdata/$', coremon_views.preprocessData, name='preprocessdata'),
 
