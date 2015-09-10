@@ -2184,8 +2184,13 @@ def userInfo(request, user=''):
         if 'user' in request.session['requestParams']: user = request.session['requestParams']['user']
         if 'produsername' in request.session['requestParams']: user = request.session['requestParams']['produsername']
 
+    if 'days' in request.session['requestParams']:
+        days = int(request.session['requestParams']['days'])
+    else:
+        days = 7
+
     ## Tasks owned by the user
-    startdate = timezone.now() - timedelta(hours=7*24)
+    startdate = timezone.now() - timedelta(hours=days*24)
     startdate = startdate.strftime(defaultDatetimeFormat)
     enddate = timezone.now().strftime(defaultDatetimeFormat)
     query = { 'modificationtime__range' : [startdate, enddate] }
@@ -4115,13 +4120,16 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
 
 
     else:
-        testjobs = preprocessParams['testjobs']
-        jobtype = preprocessParams['jobtype']
-        query = { 'modificationtime__range' : preprocessParams['modificationtime__range']}
-        selecttionParams = preprocessParams['selectionParam']
-        for papamKey,papamValue in selecttionParams.iteritems():
-            if not papamKey.lower() == 'mode':
-                query[papamKey.lower()] = papamValue
+        if 'pandaids' not in preprocessParams:
+            testjobs = preprocessParams['testjobs']
+            jobtype = preprocessParams['jobtype']
+            query = { 'modificationtime__range' : preprocessParams['modificationtime__range']}
+            selecttionParams = preprocessParams['selectionParam']
+            for papamKey,papamValue in selecttionParams.iteritems():
+                if not papamKey.lower() == 'mode':
+                    query[papamKey.lower()] = papamValue
+        else:
+            query = { 'pandaid__in' : preprocessParams['pandaids']}
         wildCardExtension = '1=1'
         joblimit = 20000000
         hours = 100000000
@@ -5776,9 +5784,7 @@ def doPreprocess(request, rec, groupType):
 # Here we check equivalency of already preprocessed group of jobs and group to be shown now
 
                 groupID = group['GROUPID']
-
                 theGroupShouldBeUpdated = True
-
                 if len(jobsWillBeProcessedhash) == len(group['jobsids']):
                     for jobid, modificationTime in jobsWillBeProcessedhash.iteritems():
                         if jobid not in group['jobsids']: # we already applied restriction of the modification time in both queries so we don't check it now
@@ -5786,15 +5792,11 @@ def doPreprocess(request, rec, groupType):
                             break
                 else:
                     theGroupShouldBeUpdated = True
-
             else:
                  toProcess = True
-
             if not (toProcess or theGroupShouldBeUpdated):
                 continue
-
             data = errorSummary(requestlocal, paramSet )
-
             newGroupID = PreprocessGroups.objects.count()
             newJobsGroup = PreprocessGroups(
                 groupid = newGroupID,
@@ -5830,6 +5832,8 @@ def doPreprocess(request, rec, groupType):
 
 def errorSummary2(request, preprocessParams = None, justCheckJobs = False):
     jobs = errorSummary(request, preprocessParams = None, justCheckJobs = True)
+    tmpTableName = "ATLAS_PANDABIGMON.TMP_IDS1"
+    transactionKey = random.randrange(1000000)
 
     '''
     SELECT GROUPID, COUNTS, PANDAID FROM
@@ -5842,7 +5846,9 @@ ON (t2.GROUPID=t1.GROUPID1) and (countsall=counts)
 WHERE (countsall is not null) ORDER BY COUNTS DESC) t3
 
 LEFT JOIN (SELECT PANDAID, GROUPID FROM PREPROCESS_JOBS) t4
-ON t4.GROUPID = t3.GROUPID1 ORDER BY GROUPID, COUNTS;
+ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID;
+
+
     '''
 
 
@@ -5852,11 +5858,62 @@ ON t4.GROUPID = t3.GROUPID1 ORDER BY GROUPID, COUNTS;
     for job in jobs:
         jobsids.append(job['pandaid'])
 
+    connection.enter_transaction_management()
+    new_cur = connection.cursor()
+    for id in jobsids:
+        new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,id,transactionKey)) # Backend dependable
+    connection.commit()
+
+    query = 'SELECT GROUPID, COUNTS, PANDAID FROM (SELECT GROUPID1, counts  FROM (SELECT GROUPID as GROUPID1, count(GROUPID) as counts FROM PREPROCESS_JOBS WHERE ID in '
+    query += '( SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)' % (tmpTableName, transactionKey)
+    query += """GROUP BY GROUPID) t1 LEFT JOIN (SELECT count(*) as countsall, GROUPID FROM PREPROCESS_JOBS GROUP BY GROUPID) t2
+                ON (t2.GROUPID=t1.GROUPID1) and (countsall=counts)
+                WHERE (countsall is not null) ORDER BY COUNTS DESC) t3
+                LEFT JOIN (SELECT PANDAID, GROUPID FROM PREPROCESS_JOBS) t4
+                ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID"""
+
+    new_cur.execute(query)
+    mrecs = dictfetchall(new_cur)
+
+    groups = {}
+    for rec in mrecs:
+        groupid = rec['GROUPID']
+        if groups.has_key(groupid):
+           groups[groupid].append(rec['PANDAID'])
+        else:
+            pandaids = [rec['PANDAID']]
+            groups[groupid] = pandaids
+
+    jobsPreprocessed = []
+    usedGroups = []
+    for groupid, pandaids in groups.iteritems():
+        if len(set(jobsPreprocessed).intersection(pandaids)) == 0 :
+            jobsPreprocessed.extend(pandaids)
+            usedGroups.append(groupid)
+
+    JobsToProcess = jobsids - jobsPreprocessed
+    paramSet = {'pandaids':JobsToProcess}
+    request.session['requestParams']['pandaid'] = ",".join(JobsToProcess)
+    data = errorSummary(request, paramSet )
+
+    dataToMerge = []
+    dataToMerge.append(data)
+    print dataToMerge
+
+
     '''
     1. fetch pandaids on the server
     2. Select GROUPID from PREPROCESS_JOBS where PANDAID in ...
     3. Select count(PANDAID), groupid where GROUPID in previous select, group by GROUPID
     4.
+
+
+
+        new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
+    connection.commit()
+    connection.leave_transaction_management()
+
+
     '''
 
 
