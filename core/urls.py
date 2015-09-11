@@ -51,8 +51,7 @@ urlpatterns = patterns('',
     url(r'^errors2/$', coremon_views.errorSummary2, name='errorSummary2'),
 
 #    url(r'^preprocessdata/$', coremon_views.preprocessData, name='preprocessdata'),
-
-    ### data product catalog prototyping                                                                                                                                                         
+    ### data product catalog prototyping
     url(r'^dp/$', dpviews.doRequest, name='doRequest'),
 
     ### filebrowser

@@ -2604,7 +2604,8 @@ def siteSummary(query, notime=True):
 def taskSummaryData(request, query):
     summary = []
     querynotime = query
-    del querynotime['modificationtime__range']
+    if 'modificationtime__range' in querynotime:
+        del querynotime['modificationtime__range']
     summary.extend(Jobsactive4.objects.filter(**querynotime).values('taskid','jobstatus').annotate(Count('jobstatus')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
     summary.extend(Jobsdefined4.objects.filter(**querynotime).values('taskid','jobstatus').annotate(Count('jobstatus')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
     summary.extend(Jobswaiting4.objects.filter(**querynotime).values('taskid','jobstatus').annotate(Count('jobstatus')).order_by('taskid','jobstatus')[:request.session['JOB_LIMIT']])
@@ -2826,12 +2827,16 @@ def dashSummary(request, hours, limit=999999, view='all', cloudview='region', no
     if preprocessParams is None:
         query = setupView(request,hours=hours,limit=limit,opmode=view)
     else:
-        query = { 'modificationtime__range' : preprocessParams['modificationtime__range']}
-        selecttionParams = preprocessParams['selectionParam']
-        for papamKey,papamValue  in selecttionParams.iteritems():
-            if not papamKey.lower() == 'mode':
-                query[papamKey.lower()] = papamValue
-        notime=False
+        if 'modificationtime__range' in preprocessParams:
+            query = { 'modificationtime__range' : preprocessParams['modificationtime__range']}
+        else:
+            query = {}
+        if  'selectionParam' in preprocessParams:
+            selecttionParams = preprocessParams['selectionParam']
+            for papamKey,papamValue  in selecttionParams.iteritems():
+                if not papamKey.lower() == 'mode':
+                    query[papamKey.lower()] = papamValue
+            notime=False
 
 
 
@@ -3873,7 +3878,7 @@ def errorSummaryDict(request,jobs, tasknamedict, testjobs, preprocessParams = No
             if job['jobstatus'] not in [ 'failed', 'holding' ]: continue
         site = job['computingsite']
 
-        if (preprocessParams is not None and 'cloud' in preprocessParams['selectionParam']):
+        if (preprocessParams is not None and 'selectionParam' in preprocessParams and 'cloud' in preprocessParams['selectionParam']):
             if site in homeCloud and homeCloud[site] != preprocessParams['selectionParam']['cloud']: continue
         elif ('cloud' in request.session['requestParams']):
             if site in homeCloud and homeCloud[site] != request.session['requestParams']['cloud']: continue
@@ -3901,7 +3906,7 @@ def errorSummaryDict(request,jobs, tasknamedict, testjobs, preprocessParams = No
         for f in flist:
             if job[f]:
                 if f == 'taskid' and job[f] < 1000000 and (((preprocessParams is None) and ('produsername' not in request.session['requestParams'])) or \
-                                                                   ((preprocessParams is not None) and ('produsername' not in preprocessParams['selectionParam']))):
+                                                                   ((preprocessParams is not None) and ('selectionParam' in preprocessParams and 'produsername' not in preprocessParams['selectionParam']))):
                     pass
                 else:
                     if not f in sumd: sumd[f] = {}
@@ -3971,7 +3976,7 @@ def errorSummaryDict(request,jobs, tasknamedict, testjobs, preprocessParams = No
                 errsBySite[site]['toterrors'] += 1
                 
                 if tasktype == 'jeditaskid' and taskid > 1000000 or (((preprocessParams is None) and ('produsername' in request.session['requestParams'])) or \
-                                                                   ((preprocessParams is not None) and ('produsername' in preprocessParams['selectionParam']))):
+                                                                   ((preprocessParams is not None) and ('selectionParam' in preprocessParams and 'produsername' in preprocessParams['selectionParam']))):
                     if taskid not in errsByTask:
                         errsByTask[taskid] = {}
                         errsByTask[taskid]['name'] = taskid
@@ -4134,6 +4139,7 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
         joblimit = 20000000
         hours = 100000000
         limit = 10
+        jobtype = ''
 
 
 
@@ -4155,8 +4161,11 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
     jobs.extend(Jobsactive4.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
     jobs.extend(Jobsarchived4.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
 
-    if (((datetime.now() - datetime.strptime(query['modificationtime__range'][0], "%Y-%m-%d %H:%M:%S" )).days > 1) or \
-        ((datetime.now() - datetime.strptime(query['modificationtime__range'][1], "%Y-%m-%d %H:%M:%S" )).days > 1)):
+    if 'modificationtime__range' in query:
+        if (((datetime.now() - datetime.strptime(query['modificationtime__range'][0], "%Y-%m-%d %H:%M:%S" )).days > 1) or \
+            ((datetime.now() - datetime.strptime(query['modificationtime__range'][1], "%Y-%m-%d %H:%M:%S" )).days > 1)):
+            jobs.extend(Jobsarchived.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
+    else:
         jobs.extend(Jobsarchived.objects.filter(**query).extra(where=[wildCardExtension])[:joblimit].values(*values))
 
     print "step3-1-0"
@@ -5864,13 +5873,9 @@ ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID;
         new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,id,transactionKey)) # Backend dependable
     connection.commit()
 
-    query = 'SELECT GROUPID, COUNTS, PANDAID FROM (SELECT GROUPID1, counts  FROM (SELECT GROUPID as GROUPID1, count(GROUPID) as counts FROM PREPROCESS_JOBS WHERE ID in '
+    query = 'SELECT GROUPID, COUNTS, PANDAID FROM (SELECT GROUPID1, counts  FROM (SELECT GROUPID as GROUPID1, count(GROUPID) as counts FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS WHERE ID in '
     query += '( SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)' % (tmpTableName, transactionKey)
-    query += """GROUP BY GROUPID) t1 LEFT JOIN (SELECT count(*) as countsall, GROUPID FROM PREPROCESS_JOBS GROUP BY GROUPID) t2
-                ON (t2.GROUPID=t1.GROUPID1) and (countsall=counts)
-                WHERE (countsall is not null) ORDER BY COUNTS DESC) t3
-                LEFT JOIN (SELECT PANDAID, GROUPID FROM PREPROCESS_JOBS) t4
-                ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID"""
+    query += """GROUP BY GROUPID) t1 LEFT JOIN (SELECT count(*) as countsall, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS GROUP BY GROUPID) t2 ON (t2.GROUPID=t1.GROUPID1) and (countsall=counts) WHERE (countsall is not null) ORDER BY COUNTS DESC) t3 LEFT JOIN (SELECT PANDAID, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS) t4 ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID"""
 
     new_cur.execute(query)
     mrecs = dictfetchall(new_cur)
@@ -5891,9 +5896,12 @@ ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID;
             jobsPreprocessed.extend(pandaids)
             usedGroups.append(groupid)
 
-    JobsToProcess = jobsids - jobsPreprocessed
-    paramSet = {'pandaids':JobsToProcess}
-    request.session['requestParams']['pandaid'] = ",".join(JobsToProcess)
+
+    for jobsid in jobsPreprocessed:
+        jobsids.remove(jobsid)
+
+    paramSet = {'pandaids':jobsids}
+    request.session['requestParams']['pandaid'] = ', '.join(str(x) for x in jobsids)
     data = errorSummary(request, paramSet )
 
     dataToMerge = []
