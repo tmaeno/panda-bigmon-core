@@ -644,27 +644,27 @@ def cleanJobList(request, jobl, mode='nodrop', doAddMeta = True):
                 job['taskbuffererrordiag'] = 'Rerun scheduled to pick up unprocessed events'
                 job['piloterrorcode'] = 0
                 job['piloterrordiag'] = 'Job terminated by signal from PanDA server'
-                job['jobstatus'] = 'finished'
+#                job['jobstatus'] = 'finished'
             if 'taskbuffererrorcode' in job and job['taskbuffererrorcode'] == 112:
                 job['taskbuffererrordiag'] = 'All events processed, merge job created'
                 job['piloterrorcode'] = 0
                 job['piloterrordiag'] = 'Job terminated by signal from PanDA server'
-                job['jobstatus'] = 'finished'
+#                job['jobstatus'] = 'finished'
             if 'taskbuffererrorcode' in job and job['taskbuffererrorcode'] == 114:
                 job['taskbuffererrordiag'] = 'No rerun to pick up unprocessed, at max attempts'
                 job['piloterrorcode'] = 0
                 job['piloterrordiag'] = 'Job terminated by signal from PanDA server'
-                job['jobstatus'] = 'finished'
+#                job['jobstatus'] = 'finished'
             if 'taskbuffererrorcode' in job and job['taskbuffererrorcode'] == 115:
                 job['taskbuffererrordiag'] = 'No events remaining, other jobs still processing'
                 job['piloterrorcode'] = 0
                 job['piloterrordiag'] = 'Job terminated by signal from PanDA server'
-                job['jobstatus'] = 'finished'
+#                job['jobstatus'] = 'finished'
             if 'taskbuffererrorcode' in job and job['taskbuffererrorcode'] == 116:
                 job['taskbuffererrordiag'] = 'No remaining event ranges to allocate'
                 job['piloterrorcode'] = 0
                 job['piloterrordiag'] = 'Job terminated by signal from PanDA server'
-                job['jobstatus'] = 'finished'
+#                job['jobstatus'] = 'finished'
             if 'jobmetrics' in job:
                 pat = re.compile('.*mode\=([^\s]+).*HPCStatus\=([A-Za-z0-9]+)')
                 mat = pat.match(job['jobmetrics'])
@@ -957,15 +957,29 @@ def jobSummaryDict(request, jobs, fieldlist = None):
                 esjobdict[job['pandaid']][s] = 0
     if len(esjobs) > 0:
         sumd['eventservice'] = {}
-        esquery = {}
-        esquery['pandaid__in'] = esjobs
-        evtable = JediEvents.objects.filter(**esquery).values('pandaid','status')
+
+        tmpTableName = "ATLAS_PANDABIGMON.TMP_IDS1"
+        transactionKey = random.randrange(1000000)
+
+        connection.enter_transaction_management()
+        new_cur = connection.cursor()
+        for pandaid in esjobs:
+            new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,pandaid,transactionKey)) # Backend dependable
+        connection.commit()
+
+        new_cur.execute("SELECT PANDAID,STATUS FROM ATLAS_PANDA.JEDI_EVENTS WHERE PANDAID in (SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)" % (tmpTableName, transactionKey))
+        evtable = dictfetchall(new_cur)
+
+        new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
+        connection.commit()
+        connection.leave_transaction_management()
+
         for ev in evtable:
-            evstat = eventservicestatelist[ev['status']]
+            evstat = eventservicestatelist[ev['STATUS']]
             if evstat not in sumd['eventservice']:
                 sumd['eventservice'][evstat] = 0
             sumd['eventservice'][evstat] += 1
-            esjobdict[ev['pandaid']][evstat] += 1
+            esjobdict[ev['PANDAID']][evstat] += 1
 
     ## convert to ordered lists
     suml = []
@@ -3391,14 +3405,13 @@ def taskList(request):
     ntasks = len(tasks)
     nmax = ntasks
 
-    if 'display_limit' in request.session['requestParams'] and int(request.session['requestParams']['display_limit']) < nmax:
+    if 'display_limit' not in request.session['requestParams']:
+        display_limit = 300
+        url_nolimit = request.get_full_path() +"&display_limit="+str(nmax)
+    else:
         display_limit = int(request.session['requestParams']['display_limit'])
         nmax = display_limit
-        url_nolimit = removeParam(request.get_full_path(), 'display_limit')
-    else:
-        display_limit = 300
-        nmax = display_limit
-        url_nolimit = request.get_full_path()
+        url_nolimit = request.get_full_path() +"&display_limit="+str(nmax)
 
     #from django.db import connection
     #print 'SQL query:', connection.queries
