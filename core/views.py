@@ -5864,7 +5864,7 @@ def doPreprocess(request, rec, groupType):
         requestParams['mode'] = 'nodrop'
 #        setattr(request.session, 'requestParams', requestParams)
 
-        timelowerbound = rec['TIMEUPPERBOUND'] - timedelta(hours=1)
+        timelowerbound = rec['TIMEUPPERBOUND'] - timedelta(hours=12)
         sets.append({'testjobs': True, 'jobtype':'rc_test', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
         sets.append({'testjobs': False, 'jobtype':'analysis', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
         sets.append({'testjobs': False, 'jobtype':'production','selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)]})
@@ -5942,7 +5942,7 @@ def doPreprocess(request, rec, groupType):
 
 def errorSummary2(request, preprocessParams = None, justCheckJobs = False):
     jobs = errorSummary(request, preprocessParams = None, justCheckJobs = True)
-    tmpTableName = "ATLAS_PANDABIGMON.TMP_IDS1"
+    tmpTableName = "ATLAS_PANDABIGMON.TMP_IDS1DEBUG"
     transactionKey = random.randrange(1000000)
 
     '''
@@ -5976,7 +5976,7 @@ ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID;
 
     query = 'SELECT GROUPID, COUNTS, PANDAID FROM (SELECT GROUPID1, counts  FROM (SELECT GROUPID as GROUPID1, count(GROUPID) as counts FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS WHERE ID in '
     query += '( SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)' % (tmpTableName, transactionKey)
-    query += """GROUP BY GROUPID) t1 LEFT JOIN (SELECT count(*) as countsall, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS GROUP BY GROUPID) t2 ON (t2.GROUPID=t1.GROUPID1) and (countsall=counts) WHERE (countsall is not null) ORDER BY COUNTS DESC) t3 LEFT JOIN (SELECT PANDAID, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS) t4 ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID"""
+    query += """ GROUP BY GROUPID) t1 LEFT JOIN (SELECT count(*) as countsall, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS GROUP BY GROUPID) t2 ON (t2.GROUPID=t1.GROUPID1) and (countsall=counts) WHERE (countsall is not null) ORDER BY COUNTS DESC) t3 LEFT JOIN (SELECT PANDAID, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS) t4 ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID """
 
     new_cur.execute(query)
     mrecs = dictfetchall(new_cur)
@@ -6026,8 +6026,11 @@ ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID;
     '''
 
 
+    del request.session['TFIRST']
+    del request.session['TLAST']
     response = render_to_response('errorSummary.html', data, RequestContext(request))
     patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
+    del request.session['requestParams']
     return response
 
 
