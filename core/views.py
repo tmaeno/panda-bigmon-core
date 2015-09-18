@@ -5886,7 +5886,7 @@ ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID;
         new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,id,transactionKey)) # Backend dependable
     connection.commit()
 
-    query = 'SELECT GROUPID, COUNTS, PANDAID FROM (SELECT GROUPID1, counts  FROM (SELECT GROUPID as GROUPID1, count(GROUPID) as counts FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS WHERE ID in '
+    query = 'SELECT GROUPID, COUNTS, PANDAID FROM (SELECT GROUPID1, counts  FROM (SELECT GROUPID as GROUPID1, count(GROUPID) as counts FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS WHERE PANDAID in '
     query += '( SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)' % (tmpTableName, transactionKey)
     query += """GROUP BY GROUPID) t1 LEFT JOIN (SELECT count(*) as countsall, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS GROUP BY GROUPID) t2 ON (t2.GROUPID=t1.GROUPID1) and (countsall=counts) WHERE (countsall is not null) ORDER BY COUNTS DESC) t3 LEFT JOIN (SELECT PANDAID, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS) t4 ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID"""
 
@@ -5937,7 +5937,9 @@ ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID;
 
     '''
 
-
+    del request.session['TFIRST']
+    del request.session['TLAST']
+    del request.session['requestParams']['pandaid']
     response = render_to_response('errorSummary.html', data, RequestContext(request))
     patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
     return response
