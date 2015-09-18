@@ -4229,7 +4229,7 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
     else:
         if 'pandaids' not in preprocessParams:
             testjobs = preprocessParams['testjobs']
-            jobtype = preprocessParams['jobtype']
+#            jobtype = preprocessParams['jobtype']
             query = { 'modificationtime__range' : preprocessParams['modificationtime__range']}
             selecttionParams = preprocessParams['selectionParam']
             for papamKey,papamValue in selecttionParams.iteritems():
@@ -5870,7 +5870,12 @@ def doPreprocess(request, rec, groupType):
 
         timelowerbound = rec['TIMEUPPERBOUND'] - timedelta(hours=1)
 
-        sets.append({'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
+        if rec['PRODSOURCELABEL'] in  ('prod_test', 'rc_test'):
+            testjobs = True
+        else:
+            testjobs = False
+
+        sets.append({'testjobs': testjobs, 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
 
 
      #  sets.append({'testjobs': True, 'jobtype':'rc_test', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
