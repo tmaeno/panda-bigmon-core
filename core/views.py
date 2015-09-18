@@ -4208,7 +4208,8 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
             jobtype = 'rc_test'
 
         if jobtype == '':
-            hours = 3
+            hours = 1
+#            hours = 3
             limit = 6000
         elif jobtype.startswith('anal'):
             hours = 6
@@ -5695,32 +5696,32 @@ def fillPreprocessGroupTypes():
         newRow = PreprocessGroupTypes(grouptypeid=grouptypeid, fields=fields, page=page)
         newRow.save()
 
-def generateGroupPreprocessQuery(fields, enddate):
+def generateGroupPreprocessQuery(fields, startdate, enddate):
 
-    queryString = ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
+    queryString = 'select * FROM (select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
     queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDAARCH.JOBSARCHIVED t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' from ATLAS_PANDAARCH.JOBSARCHIVED t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
     queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
     queryString += ' UNION'
     queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
     queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.JOBSARCHIVED4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' from ATLAS_PANDA.JOBSARCHIVED4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
     queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
     queryString += ' UNION'
     queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
     queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.Jobsactive4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' from ATLAS_PANDA.Jobsactive4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
     queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
     queryString += ' UNION'
     queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
     queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.Jobsdefined4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' from ATLAS_PANDA.Jobsdefined4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
     queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
     queryString += ' UNION'
     queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
     queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.Jobswaiting4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
-    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
+    queryString += ' from ATLAS_PANDA.Jobswaiting4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields) + ')'
     return queryString
 
 
@@ -5734,8 +5735,13 @@ def generateGroupsToTrocess(request):
 
     for groupType in groupTypes:
         enddate = timezone.now().strftime(defaultDatetimeFormat)
+        lastGroupBuildTime = lastGroupBuildTime.strftime(defaultDatetimeFormat)
         fields = groupType.fields.split(',')
-        querystr = generateGroupPreprocessQuery(fields, enddate)
+        querystr = generateGroupPreprocessQuery(fields, lastGroupBuildTime, enddate)
+
+        if (groupType.page == '/errors/'):
+            querystr = querystr + " WHERE JOBSTATUS in ('failed','holding') OR PRODSOURCELABEL in ('prod_test', 'rc_test') "
+
         new_cur = connection.cursor()
         new_cur.execute(querystr)
         mrecs = dictfetchall(new_cur)
@@ -5856,18 +5862,20 @@ def doPreprocess(request, rec, groupType):
         sets = []
         requestParams = {}
         for key, value in rec.iteritems():
-            if not (key.lower() == 'timeupperbound' \
-                            or key.lower() =='testjobs' \
-                            or key.lower() =='freshestjob'):
+            if not (key.lower() == 'timeupperbound' or key.lower() =='testjobs' or key.lower() =='freshestjob'):
                 requestParams[key] = value
 
         requestParams['mode'] = 'nodrop'
 #        setattr(request.session, 'requestParams', requestParams)
 
-        timelowerbound = rec['TIMEUPPERBOUND'] - timedelta(hours=12)
-        sets.append({'testjobs': True, 'jobtype':'rc_test', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
-        sets.append({'testjobs': False, 'jobtype':'analysis', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
-        sets.append({'testjobs': False, 'jobtype':'production','selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)]})
+        timelowerbound = rec['TIMEUPPERBOUND'] - timedelta(hours=1)
+
+        sets.append({'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
+
+
+     #  sets.append({'testjobs': True, 'jobtype':'rc_test', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
+     #   sets.append({'testjobs': False, 'jobtype':'analysis', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
+     #   sets.append({'testjobs': False, 'jobtype':'production','selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)]})
 
 #        requestKeep = copy.deepcopy(request)
         for paramSet in sets:
