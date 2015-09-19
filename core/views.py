@@ -5695,32 +5695,32 @@ def fillPreprocessGroupTypes():
         newRow = PreprocessGroupTypes(grouptypeid=grouptypeid, fields=fields, page=page)
         newRow.save()
 
-def generateGroupPreprocessQuery(fields, enddate):
+def generateGroupPreprocessQuery(fields, startdate, enddate):
 
-    queryString = ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
+    queryString = 'select * FROM (select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
     queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDAARCH.JOBSARCHIVED t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' from ATLAS_PANDAARCH.JOBSARCHIVED t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
     queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
     queryString += ' UNION'
     queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
     queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.JOBSARCHIVED4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' from ATLAS_PANDA.JOBSARCHIVED4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
     queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
     queryString += ' UNION'
     queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
     queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.Jobsactive4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' from ATLAS_PANDA.Jobsactive4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
     queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
     queryString += ' UNION'
     queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
     queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.Jobsdefined4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' from ATLAS_PANDA.Jobsdefined4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
     queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
     queryString += ' UNION'
     queryString += ' select ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\' as timeupperbound, max(t1.MODIFICATIONTIME) as freshestjob, '
     queryString += ", ".join(fields)
-    queryString += ' from ATLAS_PANDA.Jobswaiting4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + enddate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
-    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields)
+    queryString += ' from ATLAS_PANDA.Jobswaiting4 t1 WHERE t1.MODIFICATIONTIME >=TO_DATE(\'' + startdate +'\', \'YYYY-MM-DD HH24:MI:SS\')'
+    queryString += ' group by ceil((t1.MODIFICATIONTIME-date \'-4712-01-01\')*24)/24+date \'-4712-01-01\','+", ".join(fields) + ')'
     return queryString
 
 
