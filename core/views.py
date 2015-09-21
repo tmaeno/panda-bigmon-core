@@ -51,6 +51,7 @@ from core.common.models import JediWorkQueue
 from core.common.models import RequestStat
 from core.settings.config import ENV
 
+import multiprocessing as mp
 
 from time import gmtime, strftime
 from settings.local import dbaccess
@@ -4228,7 +4229,6 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
     else:
         if 'pandaids' not in preprocessParams:
             testjobs = preprocessParams['testjobs']
-            jobtype = preprocessParams['jobtype']
             query = { 'modificationtime__range' : preprocessParams['modificationtime__range']}
             selecttionParams = preprocessParams['selectionParam']
             for papamKey,papamValue in selecttionParams.iteritems():
@@ -5634,6 +5634,7 @@ def endSelfMonitor(request):
 
 def preProcess(request):
 
+    request.session['JOB_LIMIT'] = 1000000
     ''' todo:
     0. Decide tables structure and parameters aggregates approach
     1. Get List of Jobs modified later than previosly saved last modified job
@@ -5744,9 +5745,16 @@ def generateGroupsToTrocess(request):
         new_cur = connection.cursor()
         new_cur.execute(querystr)
         mrecs = dictfetchall(new_cur)
+
+
+#        pool = mp.Pool(processes=6)
+#        results = [pool.apply(doPreprocess, args=((request, rec, groupType))) for rec in mrecs]
+
         for rec in mrecs:
             data = doPreprocess(request, rec, groupType)
-            print rec
+            print data
+
+
 # Here, for each group make JSON generation
 
 
@@ -5868,9 +5876,10 @@ def doPreprocess(request, rec, groupType):
 #        setattr(request.session, 'requestParams', requestParams)
 
         timelowerbound = rec['TIMEUPPERBOUND'] - timedelta(hours=1)
-        sets.append({'testjobs': True, 'jobtype':'rc_test', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
-        sets.append({'testjobs': False, 'jobtype':'analysis', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
-        sets.append({'testjobs': False, 'jobtype':'production','selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)]})
+
+#        sets.append({'testjobs': True, 'jobtype':'rc_test', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
+#        sets.append({'testjobs': False, 'jobtype':'analysis', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
+#        sets.append({'testjobs': False, 'jobtype':'production','selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)]})
 
         if rec['PRODSOURCELABEL'] in  ('prod_test', 'rc_test'):
             testjobs = True
