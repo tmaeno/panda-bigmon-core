@@ -1,5 +1,5 @@
-
 import logging, re, json, commands, os, copy
+from copy import deepcopy
 from datetime import datetime, timedelta
 import time
 import json
@@ -18,15 +18,15 @@ from django.utils import timezone
 from django.utils.cache import patch_cache_control, patch_response_headers
 from django.db.models import Q
 from django.core.cache import cache
+from django.core.handlers.wsgi import WSGIRequest
 from django.utils import encoding
 from django.conf import settings as djangosettings
 from django.db import connection, transaction
 
-
 from core.common.utils import getPrefix, getContextVariables, QuerySetChain
 from core.settings import STATIC_URL, FILTER_UI_ENV, defaultDatetimeFormat
 from core.pandajob.models import PandaJob, Jobsactive4, Jobsdefined4, Jobswaiting4, Jobsarchived4, Jobsarchived, \
-        GetRWWithPrioJedi3DAYS, PreprocessGroupTypes, PreprocessGroups, PreprocessKeys, PreprocessJobs
+    GetRWWithPrioJedi3DAYS, PreprocessGroupTypes, PreprocessGroups, PreprocessKeys, PreprocessJobs
 from resource.models import Schedconfig
 from core.common.models import Filestable4
 from core.common.models import Datasets
@@ -52,6 +52,7 @@ from core.common.models import RequestStat
 from core.settings.config import ENV
 
 import multiprocessing as mp
+import threading
 
 from time import gmtime, strftime
 from settings.local import dbaccess
@@ -59,6 +60,10 @@ import string as strm
 from django.views.decorators.cache import cache_page
 
 import ErrorCodes
+
+import fcntl
+
+
 errorFields = []
 errorCodes = {}
 errorStages = {}
@@ -118,6 +123,29 @@ standard_taskfields = [ 'tasktype', 'superstatus', 'corecount', 'taskpriority', 
 VOLIST = [ 'atlas', 'bigpanda', 'htcondor', 'core', ]
 VONAME = { 'atlas' : 'ATLAS', 'bigpanda' : 'BigPanDA', 'htcondor' : 'HTCondor', 'core' : 'LSST', '' : '' }
 VOMODE = ' '
+
+grequest = {}
+
+
+
+class DJangoLock:
+
+    def __init__(self, filename):
+        self.filename = filename
+        # This will create it if it does not exist already
+        self.handle = open(filename, 'w')
+
+    # flock() is a blocking call unless it is bitwise ORed with LOCK_NB to avoid blocking
+    # on lock acquisition.  This blocking is what I use to provide atomicity across forked
+    # Django processes since native python locks and semaphores only work at the thread level
+    def acquire(self):
+        fcntl.flock(self.handle, fcntl.LOCK_EX)
+
+    def release(self):
+        fcntl.flock(self.handle, fcntl.LOCK_UN)
+
+    def __del__(self):
+        self.handle.close()
 
 
 
@@ -853,6 +881,7 @@ def cleanTaskList(request, tasks):
             dsinfo[taskid].append(ds)
 
     new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
+    new_cur.close()
     connection.commit()
     connection.leave_transaction_management()
 
@@ -972,6 +1001,7 @@ def jobSummaryDict(request, jobs, fieldlist = None):
         evtable = dictfetchall(new_cur)
 
         new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
+        new_cur.close()
         connection.commit()
         connection.leave_transaction_management()
 
@@ -3521,6 +3551,7 @@ def taskList(request):
 #        evtable = JediEvents.objects.filter(**esquery).values('pandaid','status')
 
         new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
+        new_cur.close()
         connection.commit()
         connection.leave_transaction_management()
 
@@ -3799,6 +3830,7 @@ def taskInfo(request, jeditaskid=0):
         evtable = dictfetchall(new_cur)
 
         new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
+        new_cur.close()
         connection.commit()
         connection.leave_transaction_management()
 
@@ -4286,9 +4318,6 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
     njobs = len(jobs)
     tasknamedict = taskNameDict(jobs)
 
-    print "step3-1-1"
-    print str(datetime.now())
-
 
     ## Build the error summary.
     errsByCount, errsBySite, errsByUser, errsByTask, sumd, errHist = errorSummaryDict(request,jobs, tasknamedict, testjobs, preprocessParams)
@@ -4317,11 +4346,7 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
     taskname = ''
     if not testjobs:
         ## Build the task state summary and add task state info to task error summary
-        print "step3-1-2"
-        print str(datetime.now())
         taskstatesummary = dashTaskSummary(request, hours, limit=limit, view=jobtype, query=query)
-        print "step3-2"
-        print str(datetime.now())
 
         taskstates = {}
         for task in taskstatesummary:
@@ -4345,10 +4370,6 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
     else:
         sortby = 'alpha'
     flowstruct = buildGoogleFlowDiagram(request, jobs=jobs)
-
-    print "step3-3"
-    print str(datetime.now())
-
 
     request.session['max_age_minutes'] = 6
 
@@ -5571,6 +5592,7 @@ def addJobMetadata(jobs, require = False):
                 #job['metadata'] = mdict[job['pandaid']]
     print 'added metadata'
     new_cur.execute("DELETE FROM %s WHERE TRANSACTIONKEY=%i" % (tmpTableName, transactionKey))
+    new_cur.close()
     connection.commit()
     connection.leave_transaction_management()
     return jobs
@@ -5725,9 +5747,13 @@ def generateGroupPreprocessQuery(fields, startdate, enddate):
     return queryString
 
 
+def doPreprocessWrap(rec, transactionKey,  groupType):
+    print transactionKey
+    request = grequest[transactionKey]
+    doPreprocess(request, rec, groupType)
+    return 0
 
 def generateGroupsToTrocess(request):
-
     groupTypes = PreprocessGroupTypes.objects.all()
     lastGroupBuildTime = cache.get('lastpreproccesstime')
     if (lastGroupBuildTime is None) or (len(lastGroupBuildTime) == 0):
@@ -5745,17 +5771,34 @@ def generateGroupsToTrocess(request):
         new_cur = connection.cursor()
         new_cur.execute(querystr)
         mrecs = dictfetchall(new_cur)
+        new_cur.close()
+        random.seed()
+
+        class Object(object):
+            pass
+        skimmedRequest = Object()
+        skimmedRequest.session = copy.deepcopy(request.session)
+        #session
 
 
-#        pool = mp.Pool(processes=6)
-#        results = [pool.apply(doPreprocess, args=((request, rec, groupType))) for rec in mrecs]
+        transactionKey = random.randrange(1000000)
+        while (setGRequest(transactionKey, skimmedRequest) == False):
+            transactionKey = random.randrange(1000000)
 
-        for rec in mrecs:
-            data = doPreprocess(request, rec, groupType)
-            print data
+        pool = mp.Pool(processes=8)
+        args = (transactionKey, groupType)
+        results = [pool.apply(doPreprocessWrap,  (rec,) + args) for rec in mrecs]
+        print results
+
+        delGRequest(transactionKey)
+
+#        for rec in mrecs:
+#            data = doPreprocess(request, rec, groupType)
+#            print data
 
 
 # Here, for each group make JSON generation
+
 
 
 
@@ -5775,6 +5818,7 @@ def checkAlreadyPreProcessedJobs(paramSet):
     WHERE (NUMCRIT1 is not NULL) AND (GROUPID1 is not NULL)
     '''
 
+
     query = 'SELECT GROUPID, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM (SELECT count(GROUPID) as NUMCRIT, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_GROUPSKEYS WHERE '
 
     counter = 0
@@ -5791,13 +5835,19 @@ def checkAlreadyPreProcessedJobs(paramSet):
     query += ' AND (TIMELOWERBOUND=TO_DATE(\'%s\', \'YYYY-MM-DD HH24:MI:SS\')) AND (TIMEUPPERBOUND=TO_DATE(\'%s\', \'YYYY-MM-DD HH24:MI:SS\'))' % (paramSet['modificationtime__range'][0], paramSet['modificationtime__range'][1])
 
 
-    new_cur = connection.cursor()
-    new_cur.execute(query)
-    groupsids = dictfetchall(new_cur)
+
+
+    try:
+        new_cur = connection.cursor()
+        new_cur.execute(query)
+        groupsids = dictfetchall(new_cur)
+    finally:
+        new_cur.close()
 
     lastTimeUpdated = None
     groupsidret = []
 
+    '''
     if len(groupsids) > 0:
         if 'LASTTIMEUPDATED' in groupsids:
             lastTimeUpdated = 'LASTTIMEUPDATED'
@@ -5817,8 +5867,11 @@ def checkAlreadyPreProcessedJobs(paramSet):
 
 ## We should return jobs, not groups
 
-    return groupsidret
 
+
+    return groupsidret
+    '''
+    return 0
 
 
 
@@ -5895,7 +5948,8 @@ def doPreprocess(request, rec, groupType):
 
 #        requestKeep = copy.deepcopy(request)
         for paramSet in sets:
-            requestlocal = request
+
+            requestlocal = copy.deepcopy(request)
             requestlocal.session['requestParams'] = requestParams
             startTime = datetime.now().strftime(defaultDatetimeFormat)
 
@@ -5904,7 +5958,9 @@ def doPreprocess(request, rec, groupType):
 # We should split all jobs into groups by time interval. Then we should compare only corresponded groups. There should no more than only one corresponded group in the DB.
 # If there no corresponded group we just preprocess that group. If it is there, we check lenght and compare jobs ids. If there is some discrepancy we delete old group and generate a new one.
 
-            groupsAlreadyProcessed = checkAlreadyPreProcessedJobs(paramSet)
+
+#            groupsAlreadyProcessed = checkAlreadyPreProcessedJobs(paramSet)
+            groupsAlreadyProcessed=[]
 
             jobsWillBeProcessedhash = {}
             for job in jobsWillBeProcessed:
@@ -5912,7 +5968,6 @@ def doPreprocess(request, rec, groupType):
 
             toProcess = False
             groupID = -1
-
             if groupsAlreadyProcessed:
                 group = groupsAlreadyProcessed[0] # Should be only one
 # Here we check equivalency of already preprocessed group of jobs and group to be shown now
@@ -5930,6 +5985,8 @@ def doPreprocess(request, rec, groupType):
                  toProcess = True
             if not (toProcess or theGroupShouldBeUpdated):
                 continue
+
+
             data = errorSummary(requestlocal, paramSet )
             newGroupID = PreprocessGroups.objects.count()
             newJobsGroup = PreprocessGroups(
@@ -5992,18 +6049,25 @@ ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID;
     for job in jobs:
         jobsids.append(job['pandaid'])
 
-    connection.enter_transaction_management()
-    new_cur = connection.cursor()
-    for id in jobsids:
-        new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,id,transactionKey)) # Backend dependable
-    connection.commit()
+#    connection.enter_transaction_management()
 
-    query = 'SELECT GROUPID, COUNTS, PANDAID FROM (SELECT GROUPID1, counts  FROM (SELECT GROUPID as GROUPID1, count(GROUPID) as counts FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS WHERE PANDAID in '
-    query += '( SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)' % (tmpTableName, transactionKey)
-    query += """ GROUP BY GROUPID) t1 LEFT JOIN (SELECT count(*) as countsall, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS GROUP BY GROUPID) t2 ON (t2.GROUPID=t1.GROUPID1) and (countsall=counts) WHERE (countsall is not null) ORDER BY COUNTS DESC) t3 LEFT JOIN (SELECT PANDAID, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS) t4 ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID """
+    try:
+        new_cur = connection.cursor()
+        for id in jobsids:
+            new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,id,transactionKey)) # Backend dependable
+        connection.commit()
 
-    new_cur.execute(query)
-    mrecs = dictfetchall(new_cur)
+        query = 'SELECT GROUPID, COUNTS, PANDAID FROM (SELECT GROUPID1, counts  FROM (SELECT GROUPID as GROUPID1, count(GROUPID) as counts FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS WHERE PANDAID in '
+        query += '( SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)' % (tmpTableName, transactionKey)
+        query += """ GROUP BY GROUPID) t1 LEFT JOIN (SELECT count(*) as countsall, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS GROUP BY GROUPID) t2 ON (t2.GROUPID=t1.GROUPID1) and (countsall=counts) WHERE (countsall is not null) ORDER BY COUNTS DESC) t3 LEFT JOIN (SELECT PANDAID, GROUPID FROM ATLAS_PANDABIGMON.PREPROCESS_JOBS) t4 ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID """
+
+        new_cur.execute(query)
+        mrecs = dictfetchall(new_cur)
+    finally:
+        new_cur.close()
+
+#    connection.leave_transaction_management()
+
 
     groups = {}
     for rec in mrecs:
@@ -6069,3 +6133,18 @@ ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID;
 
 
 
+
+
+
+## This function is needed to push into async threads updated value of grequest
+def setGRequest(transactionKey, skimmedRequest):
+    global grequest
+    if transactionKey in grequest:
+        return False
+    else:
+        grequest[transactionKey] = skimmedRequest
+        return True
+
+def delGRequest(transactionKey):
+    global grequest
+    del grequest[transactionKey]
