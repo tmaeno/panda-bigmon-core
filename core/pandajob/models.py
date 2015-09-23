@@ -124,6 +124,15 @@ class PreprocessKeys(models.Model):
         db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_GROUPSKEYS"'
 
 
+class PreprocessQueues(models.Model):
+    preptaskid= models.BigIntegerField(primary_key=True, db_column='PREPTASKID')
+    grouptypeid = models.BigIntegerField(db_column='GROUPTYPEID')
+    jsondata = models.CharField(max_length=2000, db_column='JSONDATA', blank=True)
+    timeprepstarted = models.DateTimeField(null=True, db_column='TIMEPREPSTARTED')
+    class Meta:
+        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_QUEUES"'
+
+
 class PreprocessJobs(models.Model):
     groupid = models.BigIntegerField(db_column='GROUPID')
     pandaid = models.BigIntegerField(db_column='PANDAID')

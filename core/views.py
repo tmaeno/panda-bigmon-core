@@ -26,7 +26,7 @@ from django.db import connection, transaction
 from core.common.utils import getPrefix, getContextVariables, QuerySetChain
 from core.settings import STATIC_URL, FILTER_UI_ENV, defaultDatetimeFormat
 from core.pandajob.models import PandaJob, Jobsactive4, Jobsdefined4, Jobswaiting4, Jobsarchived4, Jobsarchived, \
-    GetRWWithPrioJedi3DAYS, PreprocessGroupTypes, PreprocessGroups, PreprocessKeys, PreprocessJobs
+    GetRWWithPrioJedi3DAYS, PreprocessQueues, PreprocessGroupTypes, PreprocessGroups, PreprocessKeys, PreprocessJobs
 from resource.models import Schedconfig
 from core.common.models import Filestable4
 from core.common.models import Datasets
@@ -338,7 +338,7 @@ def setupView(request, opmode='', hours=0, limit=-99, querytype='job', wildCardE
     elif limit != -99 and limit > 0:
         request.session['JOB_LIMIT'] = limit
     elif VOMODE == 'atlas':
-        request.session['JOB_LIMIT'] = 1000
+        request.session['JOB_LIMIT'] = 10000
     else:
         request.session['JOB_LIMIT'] = 10000
 
@@ -5697,7 +5697,12 @@ Save result
 
     data = {}
 #    dashTaskSummary_preprocess(request)
-    generateGroupsToTrocess(request)
+
+    if 'mode' in request.REQUEST:
+        if request.REQUEST['mode'] == 'master':
+            generateGroupsToTrocess(request)
+        elif request.REQUEST['mode'] == 'slave':
+            processGeneratedGroups(request)
     response = render_to_response('preprocessLog.html', data, RequestContext(request))
     patch_response_headers(response, cache_timeout=-1)
 
@@ -5747,12 +5752,6 @@ def generateGroupPreprocessQuery(fields, startdate, enddate):
     return queryString
 
 
-def doPreprocessWrap(rec, transactionKey,  groupType):
-    print transactionKey
-    request = grequest[transactionKey]
-    doPreprocess(request, rec, groupType)
-    return 0
-
 def generateGroupsToTrocess(request):
     groupTypes = PreprocessGroupTypes.objects.all()
     lastGroupBuildTime = cache.get('lastpreproccesstime')
@@ -5781,23 +5780,39 @@ def generateGroupsToTrocess(request):
         #session
 
 
-        transactionKey = random.randrange(1000000)
-        while (setGRequest(transactionKey, skimmedRequest) == False):
-            transactionKey = random.randrange(1000000)
+        connection.enter_transaction_management()
+        for rec in mrecs:
+            newRow = PreprocessQueues(grouptypeid=groupType.grouptypeid, jsondata= json.dumps(rec, cls=DateEncoder))
+            newRow.save()
+        connection.commit()
+        connection.leave_transaction_management()
 
-        pool = mp.Pool(processes=8)
-        args = (transactionKey, groupType)
-        results = [pool.apply(doPreprocessWrap,  (rec,) + args) for rec in mrecs]
-        print results
 
-        delGRequest(transactionKey)
-
-#        for rec in mrecs:
-#            data = doPreprocess(request, rec, groupType)
-#            print data
+            #data = doPreprocess(skimmedRequest, rec, groupType)
+            #print data
 
 
 # Here, for each group make JSON generation
+
+
+def processGeneratedGroups(request):
+    class Object(object):
+        pass
+    skimmedRequest = Object()
+    skimmedRequest.session = copy.deepcopy(request.session)
+
+    #PreprocessQueues.objects.filter(groupid=groupID).delete()
+
+    while True:
+        preptask = PreprocessQueues.objects.filter(timeprepstarted__isnull=True).order_by('?').first()
+        if preptask == None:
+            break
+        groupType = PreprocessGroupTypes.objects.filter(grouptypeid=preptask.grouptypeid).values()
+        prepTaskDescr = json.loads(preptask.jsondata)
+        preptask.timeprepstarted = datetime.now().strftime(defaultDatetimeFormat)
+        preptask.save()
+        doPreprocess(skimmedRequest, prepTaskDescr, groupType[0])
+        preptask.delete()
 
 
 
@@ -5914,7 +5929,7 @@ def doPreprocess(request, rec, groupType):
 
 
 
-    if groupType.page == '/errors/':
+    if groupType['page'] == '/errors/':
 
         #'cloud' in request.session['requestParams']
         #'produsername' in request.session['requestParams']
@@ -5928,7 +5943,7 @@ def doPreprocess(request, rec, groupType):
         requestParams['mode'] = 'nodrop'
 #        setattr(request.session, 'requestParams', requestParams)
 
-        timelowerbound = rec['TIMEUPPERBOUND'] - timedelta(hours=1)
+        timelowerbound = datetime.strptime(rec['TIMEUPPERBOUND'], "%Y-%m-%dT%H:%M:%S") - timedelta(hours=1)
 
 #        sets.append({'testjobs': True, 'jobtype':'rc_test', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
 #        sets.append({'testjobs': False, 'jobtype':'analysis', 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
@@ -5939,6 +5954,7 @@ def doPreprocess(request, rec, groupType):
         else:
             testjobs = False
 
+        rec['TIMEUPPERBOUND'] = datetime.strptime(rec['TIMEUPPERBOUND'], "%Y-%m-%dT%H:%M:%S")
         sets.append({'testjobs': testjobs, 'selectionParam':requestParams, 'modificationtime__range' : [timelowerbound.strftime(defaultDatetimeFormat), rec['TIMEUPPERBOUND'].strftime(defaultDatetimeFormat)] })
 
 
@@ -5991,7 +6007,7 @@ def doPreprocess(request, rec, groupType):
             newGroupID = PreprocessGroups.objects.count()
             newJobsGroup = PreprocessGroups(
                 groupid = newGroupID,
-                grouptypeid = groupType.grouptypeid,
+                grouptypeid = groupType['grouptypeid'],
                 timelowerbound = timelowerbound,
                 timeupperbound = rec['TIMEUPPERBOUND'],
                 lasttimeupdated = startTime,
@@ -6133,18 +6149,3 @@ ON t4.GROUPID = t3.GROUPID1 ORDER BY COUNTS DESC, GROUPID;
 
 
 
-
-
-
-## This function is needed to push into async threads updated value of grequest
-def setGRequest(transactionKey, skimmedRequest):
-    global grequest
-    if transactionKey in grequest:
-        return False
-    else:
-        grequest[transactionKey] = skimmedRequest
-        return True
-
-def delGRequest(transactionKey):
-    global grequest
-    del grequest[transactionKey]
