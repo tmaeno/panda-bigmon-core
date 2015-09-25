@@ -4253,7 +4253,10 @@ def errorSummary(request, preprocessParams = None, justCheckJobs = False):
         if 'hours' in request.session['requestParams']:
             hours = int(request.session['requestParams']['hours'])
 
-        joblimit = request.session['JOB_LIMIT']
+        if 'JOB_LIMIT' in request.session:
+            joblimit = request.session['JOB_LIMIT']
+        else:
+            joblimit = limit
 
         query,wildCardExtension  = setupView(request, hours=hours, limit=limit, wildCardExt=True)
 
@@ -5803,6 +5806,9 @@ def processGeneratedGroups(request):
 
     while True:
         preptask = PreprocessQueues.objects.filter(timeprepstarted__isnull=True).order_by('?').first()
+        preptask.timeprepstarted = datetime.now().strftime(defaultDatetimeFormat)
+        preptask.save()
+
         if preptask == None:
             break
         groupType = PreprocessGroupTypes.objects.filter(grouptypeid=preptask.grouptypeid).values()
@@ -5810,7 +5816,10 @@ def processGeneratedGroups(request):
         preptask.timeprepstarted = datetime.now().strftime(defaultDatetimeFormat)
         preptask.save()
         doPreprocess(skimmedRequest, prepTaskDescr, groupType[0])
-        preptask.delete()
+        try:
+            preptask.delete()
+        except:
+            pass
 
 
 
