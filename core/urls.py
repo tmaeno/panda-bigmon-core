@@ -49,6 +49,7 @@ urlpatterns = patterns('',
     url(r'^workQueues/$', coremon_views.workQueues, name='workQueues'),
     url(r'^preprocess/$', coremon_views.preProcess, name='preprocess'),
     url(r'^errors2/$', coremon_views.errorSummary2, name='errorSummary2'),
+    url(r'^g4exceptions/$', coremon_views.g4exceptions, name='g4exceptions'),
 
 #    url(r'^preprocessdata/$', coremon_views.preprocessData, name='preprocessdata'),
     ### data product catalog prototyping

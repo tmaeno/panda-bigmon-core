@@ -4712,6 +4712,87 @@ def pandaLogger(request):
         resp = data
         return  HttpResponse(json.dumps(resp), mimetype='text/html')
 
+def g4exceptions(request):
+    valid, response = initRequest(request)
+    setupView(request, hours=365*24, limit=999999999)
+    if 'hours' in request.session['requestParams']:
+        hours = int(request.session['requestParams']['hours'])
+    else:
+        hours = 3
+
+    #ATLASRELEASE , example:
+    #JOBPARAMSTABLE, JOBPARAMETERS, PANDAID, --AMITag=e4387
+
+    query,wildCardExtension  = setupView(request, hours=hours, wildCardExt=True)
+    query['jobstatus__in'] = [ 'failed', 'holding' ]
+    query['exeerrorcode'] = 68
+    query['exeerrordiag__icontains'] = 'G4 exception'
+    values = 'pandaid', 'atlasrelease',  'exeerrorcode', 'exeerrordiag', 'jobstatus', 'transformation'
+
+    jobs = []
+    jobs.extend(Jobsactive4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+    jobs.extend(Jobsarchived4.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+    if (((datetime.now() - datetime.strptime(query['modificationtime__range'][0], "%Y-%m-%d %H:%M:%S" )).days > 1) or \
+        ((datetime.now() - datetime.strptime(query['modificationtime__range'][1], "%Y-%m-%d %H:%M:%S" )).days > 1)):
+        jobs.extend(Jobsarchived.objects.filter(**query).extra(where=[wildCardExtension])[:request.session['JOB_LIMIT']].values(*values))
+
+    if 'amitag' in request.session['requestParams']:
+        tmpTableName = "ATLAS_PANDABIGMON.TMP_IDS1"
+        transactionKey = random.randrange(1000000)
+        connection.enter_transaction_management()
+        new_cur = connection.cursor()
+        for job in jobs:
+            new_cur.execute("INSERT INTO %s(ID,TRANSACTIONKEY) VALUES (%i,%i)" % (tmpTableName,job['pandaid'],transactionKey)) # Backend dependable
+        connection.commit()
+        new_cur.execute("SELECT JOBPARAMETERS, PANDAID FROM ATLAS_PANDA.JOBPARAMSTABLE WHERE PANDAID in (SELECT ID FROM %s WHERE TRANSACTIONKEY=%i)" % (tmpTableName, transactionKey))
+        mrecs = dictfetchall(new_cur)
+        connection.commit()
+        connection.leave_transaction_management()
+        jobsToRemove = set()
+        for rec in mrecs:
+            acceptJob = True
+            parameters = rec['JOBPARAMETERS'].read()
+            tagName = "--AMITag"
+            startPos = parameters.find(tagName)
+            if startPos == -1:
+                acceptJob = False
+            endPos = parameters.find(" ", startPos)
+            AMITag = parameters[startPos+len(tagName)+1:endPos]
+            if AMITag != request.session['requestParams']['amitag']:
+                acceptJob = False
+            if acceptJob == False:
+                jobsToRemove.add(rec['PANDAID'])
+
+        jobs = filter(lambda x: not x['pandaid'] in jobsToRemove, jobs)
+
+
+
+    jobs = addJobMetadata(jobs, True)
+    errorFrequency = {}
+    errorJobs = {}
+
+    for job in jobs:
+        if (job['metastruct']['executor'][0]['logfileReport']['countSummary']['FATAL'] > 0):
+            message = job['metastruct']['executor'][0]['logfileReport']['details']['FATAL'][0]['message']
+            exceptMess = message[message.find("G4Exception :") + 14 : message.find("issued by :") -1 ]
+            if exceptMess not in errorFrequency:
+                errorFrequency[exceptMess] = 1
+            else:
+                errorFrequency[exceptMess] += 1
+
+            if exceptMess not in errorJobs:
+                errorJobs[exceptMess] = []
+                errorJobs[exceptMess].append(job['pandaid'])
+            else:
+                errorJobs[exceptMess].append(job['pandaid'])
+
+    resp = {'errorFrequency': errorFrequency, 'errorJobs':errorJobs}
+
+    del request.session['TFIRST']
+    del request.session['TLAST']
+    return  HttpResponse(json.dumps(resp), content_type='text/plain')
+
+
 @cache_page(60*6)
 def workingGroups(request):
     valid, response = initRequest(request)
