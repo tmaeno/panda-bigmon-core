@@ -4712,6 +4712,7 @@ def pandaLogger(request):
         resp = data
         return  HttpResponse(json.dumps(resp), mimetype='text/html')
 
+
 def g4exceptions(request):
     valid, response = initRequest(request)
     setupView(request, hours=365*24, limit=999999999)
