@@ -104,7 +104,10 @@ class PreprocessGroupTypes(models.Model):
         db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_GROUPTYPES"'
 
 class PreprocessGroups(models.Model):
-    groupid = models.BigIntegerField(primary_key=True, db_column='GROUPID')
+
+    groupid = models.BigIntegerField(db_column='GROUPID')
+
+#    groupid = models.BigIntegerField(primary_key=True, db_column='GROUPID')
     grouptypeid = models.BigIntegerField(db_column='GROUPTYPEID')
 #    grouptypeid = models.ForeignKey(PreprocessGroupTypes)
     timelowerbound = models.DateTimeField(null=True, db_column="TIMELOWERBOUND")

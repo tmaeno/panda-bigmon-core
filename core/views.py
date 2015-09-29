@@ -5826,6 +5826,8 @@ def processGeneratedGroups(request):
 
 def checkAlreadyPreProcessedJobs(paramSet):
 
+    # Add here check of queue
+
     '''
     The query to test:
     SELECT GROUPID, LASTTIMEUPDATED, TIMELOWERBOUND, TIMEUPPERBOUND FROM (
@@ -6011,9 +6013,9 @@ def doPreprocess(request, rec, groupType):
 
 
             data = errorSummary(requestlocal, paramSet )
-            newGroupID = PreprocessGroups.objects.count()
+            #newGroupID = PreprocessGroups.objects.count()
             newJobsGroup = PreprocessGroups(
-                groupid = newGroupID,
+            #    groupid = newGroupID,
                 grouptypeid = groupType['grouptypeid'],
                 timelowerbound = timelowerbound,
                 timeupperbound = rec['TIMEUPPERBOUND'],
