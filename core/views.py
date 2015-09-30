@@ -1667,6 +1667,7 @@ def jobList(request, mode=None, param=None):
         TLAST = request.session['TLAST']
         del request.session['TFIRST']
         del request.session['TLAST']
+        nodropPartURL = cleanURLFromDropPart(xurl)
         data = {
             'prefix': getPrefix(request),
             'errsByCount' : errsByCount,
@@ -1697,6 +1698,7 @@ def jobList(request, mode=None, param=None):
             'nosorturl' : nosorturl,
             'taskname' : taskname,
             'flowstruct' : flowstruct,
+            'nodropPartURL':nodropPartURL,
         }
         data.update(getContextVariables(request))
         ##self monitor
@@ -1727,6 +1729,20 @@ def isEventService(job):
         return True
     else:
         return False
+
+def cleanURLFromDropPart(url):
+    posDropPart = url.find('mode')
+    if ( posDropPart== -1):
+        return url
+    else:
+        if url[posDropPart-1] == '&':
+            posDropPart -= 1
+        nextAmp = url.find('&', posDropPart+1)
+        if nextAmp == -1:
+            return url[0:posDropPart]
+        else:
+            return url[0:posDropPart] + url[nextAmp+1:]
+
 
 
 def getSequentialRetries(pandaid, jeditaskid):
@@ -3854,7 +3870,26 @@ def taskInfo(request, jeditaskid=0):
             taskrec['estaskstr'] = estaskstr
 
     if request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
-        resp = []
+        del tasks
+        del columns
+        del ds
+        taskrec['creationdate'] = taskrec['creationdate'].strftime(defaultDatetimeFormat)
+        taskrec['modificationtime'] = taskrec['modificationtime'].strftime(defaultDatetimeFormat)
+        taskrec['starttime'] = taskrec['starttime'].strftime(defaultDatetimeFormat)
+        taskrec['statechangetime'] = taskrec['statechangetime'].strftime(defaultDatetimeFormat)
+
+        for dset in dsets:
+            dset['creationtime'] = dset['creationtime'].strftime(defaultDatetimeFormat)
+            dset['modificationtime'] = dset['modificationtime'].strftime(defaultDatetimeFormat)
+            if dset['statechecktime'] is not None:
+                dset['statechecktime'] = dset['statechecktime'].strftime(defaultDatetimeFormat)
+
+        data = {
+            'task' : taskrec,
+            'taskparams' : taskparams,
+            'datasets' : dsets,
+        }
+
         del request.session['TFIRST']
         del request.session['TLAST']
         return  HttpResponse(json.dumps(resp), mimetype='text/html') 
