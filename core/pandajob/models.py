@@ -105,7 +105,7 @@ class PreprocessGroupTypes(models.Model):
 
 class PreprocessGroups(models.Model):
 
-    groupid = models.BigIntegerField(db_column='GROUPID')
+    groupid = models.BigIntegerField(primary_key=True, db_column='GROUPID')
 
 #    groupid = models.BigIntegerField(primary_key=True, db_column='GROUPID')
     grouptypeid = models.BigIntegerField(db_column='GROUPTYPEID')

@@ -5900,8 +5900,11 @@ def generateGroupsToTrocess(request):
 
         connection.enter_transaction_management()
         for rec in mrecs:
-            newRow = PreprocessQueues(grouptypeid=groupType.grouptypeid, jsondata= json.dumps(rec, cls=DateEncoder))
-            newRow.save()
+            del rec['FRESHESTJOB']
+            jsondata= json.dumps(rec, cls=DateEncoder)
+            if (PreprocessQueues.objects.filter(jsondata=jsondata).count() == 0):
+                newRow = PreprocessQueues(grouptypeid=groupType.grouptypeid,jsondata=jsondata)
+                newRow.save()
         connection.commit()
         connection.leave_transaction_management()
 
@@ -6130,9 +6133,11 @@ def doPreprocess(request, rec, groupType):
 
 
             data = errorSummary(requestlocal, paramSet )
-            #newGroupID = PreprocessGroups.objects.count()
+
+            newGroupID = getNextPK('ATLAS_PANDABIGMON.PREPROCESS_GROUPS_SEQ')
+
             newJobsGroup = PreprocessGroups(
-            #    groupid = newGroupID,
+                groupid = newGroupID,
                 grouptypeid = groupType['grouptypeid'],
                 timelowerbound = timelowerbound,
                 timeupperbound = rec['TIMEUPPERBOUND'],
@@ -6161,6 +6166,22 @@ def doPreprocess(request, rec, groupType):
                 PreprocessGroups.objects.filter(groupid=groupID).delete()
 
     return 0
+
+
+def getNextPK(pSequenceName):
+
+    query = "SELECT %s.nextval FROM dual" % pSequenceName
+    try:
+        new_cur = connection.cursor()
+        new_cur.execute(query)
+        groupsids = dictfetchall(new_cur)
+    finally:
+        new_cur.close()
+
+    return groupsids[0]['NEXTVAL']
+
+
+
 
 
 def mergePreprocessedData(dataToMerge):
