@@ -2751,14 +2751,21 @@ def wnSummary(query):
 @cache_page(60*6)
 def wnInfo(request,site,wnname='all'):
     """ Give worker node level breakdown of site activity. Spot hot nodes, error prone nodes. """
+
+    if 'hours' in request.REQUEST:
+        hours = int(request.REQUEST['hours'])
+    else:
+        hours=12
+
     valid, response = initRequest(request)
     if not valid: return response
     errthreshold = 15
+
     if wnname != 'all':
-        query = setupView(request,hours=12,limit=999999)
+        query = setupView(request,hours=hours,limit=999999)
         query['modificationhost__endswith'] = wnname
     else:
-        query = setupView(request,hours=12,limit=999999)
+        query = setupView(request,hours=hours,limit=999999)
     query['computingsite'] = site
     wnsummarydata = wnSummary(query)
     totstates = {}
@@ -5903,8 +5910,11 @@ def generateGroupsToTrocess(request):
 
         connection.enter_transaction_management()
         for rec in mrecs:
-            newRow = PreprocessQueues(grouptypeid=groupType.grouptypeid, jsondata= json.dumps(rec, cls=DateEncoder))
-            newRow.save()
+            del rec['FRESHESTJOB']
+            jsondata= json.dumps(rec, cls=DateEncoder)
+            if (PreprocessQueues.objects.filter(jsondata=jsondata).count() == 0):
+                newRow = PreprocessQueues(grouptypeid=groupType.grouptypeid,jsondata=jsondata)
+                newRow.save()
         connection.commit()
         connection.leave_transaction_management()
 
@@ -6133,9 +6143,11 @@ def doPreprocess(request, rec, groupType):
 
 
             data = errorSummary(requestlocal, paramSet )
-            #newGroupID = PreprocessGroups.objects.count()
+
+            newGroupID = getNextPK('ATLAS_PANDABIGMON.PREPROCESS_GROUPS_SEQ')
+
             newJobsGroup = PreprocessGroups(
-            #    groupid = newGroupID,
+                groupid = newGroupID,
                 grouptypeid = groupType['grouptypeid'],
                 timelowerbound = timelowerbound,
                 timeupperbound = rec['TIMEUPPERBOUND'],
@@ -6164,6 +6176,22 @@ def doPreprocess(request, rec, groupType):
                 PreprocessGroups.objects.filter(groupid=groupID).delete()
 
     return 0
+
+
+def getNextPK(pSequenceName):
+
+    query = "SELECT %s.nextval FROM dual" % pSequenceName
+    try:
+        new_cur = connection.cursor()
+        new_cur.execute(query)
+        groupsids = dictfetchall(new_cur)
+    finally:
+        new_cur.close()
+
+    return groupsids[0]['NEXTVAL']
+
+
+
 
 
 def mergePreprocessedData(dataToMerge):
