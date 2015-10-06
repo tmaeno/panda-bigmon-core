@@ -1499,6 +1499,7 @@ def jobList(request, mode=None, param=None):
 
     droplist = []
     droppedIDs = set()
+    droppedPmerge = set()
 
     if dropmode and (len(taskids) == 1):
         print 'doing the drop'
@@ -1524,6 +1525,8 @@ def jobList(request, mode=None, param=None):
             if dropJob == 0 or isEventService(job):
                 if not (job['processingtype'] == 'pmerge'):
                     newjobs.append(job)
+                else:
+                    droppedPmerge.add(pandaid)
             else:
                 if not pandaid in droppedIDs:
                     droppedIDs.add(pandaid)
@@ -1682,7 +1685,7 @@ def jobList(request, mode=None, param=None):
             'sumd' : sumd,
             'xurl' : xurl,
             'droplist' : droplist,
-            'ndrops' : len(droplist),
+            'ndrops' : len(droplist) if len(droplist) > 0 else (- len(droppedPmerge)),
             'tfirst' : TFIRST,
             'tlast' : TLAST,
             'plow' : PLOW,
