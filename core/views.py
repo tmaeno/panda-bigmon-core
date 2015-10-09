@@ -7,6 +7,10 @@ import copy
 import itertools, random
 import string as strm
 
+from urllib import urlencode
+from urlparse import urlparse, urlunparse, parse_qs
+
+
 from django.http import HttpResponse
 from django.http import HttpResponseRedirect
 from django.shortcuts import render_to_response, render, redirect
@@ -191,7 +195,14 @@ def initRequest(request):
     viewParams = {}
     #if not 'viewParams' in request.session:
     request.session['viewParams'] = viewParams
-    
+
+    url = request.get_full_path()
+    u = urlparse(url)
+    query = parse_qs(u.query)
+    query.pop('timestamp', None)
+    u = u._replace(query=urlencode(query, True))
+    request.session['notimestampurl'] = urlunparse(u) + ('&' if len(query) > 0 else '?')
+
     
     if 'USER' in os.environ and os.environ['USER'] != 'apache':
         request.session['debug'] = True
@@ -3528,8 +3539,29 @@ def taskList(request):
     tquery = {}
     tquery['jeditaskid__in'] = tasksIdToBeDisplayed
     tasksEventInfo = GetEventsForTask.objects.filter(**tquery).values('jeditaskid','totevrem', 'totev')
-    failedInScouting = JediDatasets.objects.filter(**tquery).extra(where=['nFiles > nFilesTobeUsed']).values('jeditaskid')
-    failedInScouting = [ item['jeditaskid'] for item in failedInScouting]
+    failedInScouting = JediDatasets.objects.filter(**tquery).extra(where=['NFILESFAILED > NFILESTOBEUSED']).values('jeditaskid')
+
+    taskStatuses = dict((task['jeditaskid'], task['status']) for task in tasks)
+
+    failedInScouting = [ item['jeditaskid'] for item in failedInScouting if (taskStatuses[item['jeditaskid']] not in ('scouting'))]
+
+    #scoutingHasCritFailures
+    tquery['nfilesfailed__gt'] = 0
+    scoutingHasCritFailures = JediDatasets.objects.filter(**tquery).values('jeditaskid')
+    scoutingHasCritFailures = [ item['jeditaskid'] for item in scoutingHasCritFailures if (taskStatuses[item['jeditaskid']] in ('scouting'))]
+
+    tquery = {}
+    tquery['nfilesfailed'] = 0
+    tquery['jeditaskid__in'] = tasksIdToBeDisplayed
+    scoutingHasNonCritFailures = JediDatasets.objects.filter(**tquery).values('jeditaskid')
+    scoutingHasNonCritFailures = [ item['jeditaskid'] for item in scoutingHasNonCritFailures if (taskStatuses[item['jeditaskid']] == 'scouting' and item['jeditaskid'] not in scoutingHasCritFailures )]
+
+    tquery = {}
+    tquery['jeditaskid__in'] = scoutingHasNonCritFailures
+    tquery['relationtype'] = 'retry'
+    scoutingHasNonCritFailures = JediJobRetryHistory.objects.filter(**tquery).values('jeditaskid')
+    scoutingHasNonCritFailures = [ item['jeditaskid'] for item in scoutingHasNonCritFailures]
+
     for task in taskslToBeDisplayed:
         correspondendEventInfo = filter(lambda n: n.get('jeditaskid') == task['jeditaskid'], tasksEventInfo)
         if len(correspondendEventInfo) > 0:
@@ -3539,9 +3571,11 @@ def taskList(request):
             task['totevrem'] = 0
             task['totev'] = 0
         if (task['jeditaskid'] in failedInScouting):
-                task['failedscouting'] = True
-        else:
-            task['failedscouting'] = False
+            task['failedscouting'] = True
+        if (task['jeditaskid'] in scoutingHasCritFailures):
+            task['scoutinghascritfailures'] = True
+        if (task['jeditaskid'] in scoutingHasNonCritFailures):
+            task['scoutinghasnoncritfailures'] = True
 
     ## For event service, pull the jobs and event ranges
     if eventservice:        
