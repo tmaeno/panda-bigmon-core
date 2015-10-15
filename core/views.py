@@ -1299,7 +1299,7 @@ def mainPage(request):
         for env in os.environ:
             debuginfo += "%s = %s<br>" % ( env, os.environ[env] )
 
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         del request.session['TFIRST']
         del request.session['TLAST']
         data = {
@@ -1326,7 +1326,7 @@ def helpPage(request):
     setupView(request)
     del request.session['TFIRST']
     del request.session['TLAST']
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         data = {
             'prefix': getPrefix(request),
             'request' : request,
@@ -1622,7 +1622,7 @@ def jobList(request, mode=None, param=None):
 
 
 
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         sumd, esjobdict = jobSummaryDict(request, jobs)
         testjobs = False
 
@@ -2072,7 +2072,7 @@ def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
         if len(errorinfo) > 0:
             job['errorinfo'] = errorinfo
 
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         del request.session['TFIRST']
         del request.session['TLAST']
         data = {
@@ -2229,7 +2229,7 @@ def userList(request):
             
         jobsumd = jobSummaryDict(request, jobs, sumparams)[0]
         
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         TFIRST = request.session['TFIRST']
         TLAST = request.session['TLAST']
         del request.session['TFIRST']
@@ -2363,7 +2363,7 @@ def userInfo(request, user=''):
         njobsmax = display_limit
         url_nolimit = request.get_full_path()
 
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         sumd = userSummaryDict(jobs)
         flist =  [ 'jobstatus', 'prodsourcelabel', 'processingtype', 'specialhandling', 'transformation', 'jobsetid', 'jeditaskid', 'computingsite', 'cloud', 'workinggroup', 'homepackage', 'inputfileproject', 'inputfiletype', 'attemptnr', 'priorityrange', 'jobsetrange' ]
         if VOMODE != 'atlas':
@@ -2516,7 +2516,7 @@ def siteList(request):
         clouds = None
     xurl = extensibleURL(request)
     nosorturl = removeParam(xurl, 'sortby',mode='extensible')
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         sumd = siteSummaryDict(sites)
         del request.session['TFIRST']
         del request.session['TLAST']
@@ -2569,7 +2569,7 @@ def siteInfo(request, site=''):
     except AttributeError:
         pass
 
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         attrs = []
         if siterec:
             attrs.append({'name' : 'GOC name', 'value' : siterec.gocname })
@@ -2875,7 +2875,7 @@ def wnInfo(request,site,wnname='all'):
     for k in kys:
         wnPlotFinishedL.append( [ k, wnPlotFinished[k] ] )
 
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         xurl = extensibleURL(request)
         del request.session['TFIRST']
         del request.session['TLAST']
@@ -3415,7 +3415,7 @@ def dashboard(request, view='production'):
             
             
     request.session['max_age_minutes'] = 6
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         xurl = extensibleURL(request)
         nosorturl = removeParam(xurl, 'sortby',mode='extensible')
         del request.session['TFIRST']
@@ -3516,7 +3516,7 @@ def dashTasks(request, hours, view='production'):
         if cloud['name'] in rwData.keys():
             rw[cloud['name']] = rwData[cloud['name']]
 
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         xurl = extensibleURL(request)
         nosorturl = removeParam(xurl, 'sortby',mode='extensible')
         del request.session['TFIRST']
@@ -3710,7 +3710,7 @@ def taskList(request):
     flowstruct = buildGoogleFlowDiagram(request, tasks=tasks)
     xurl = extensibleURL(request)
     nosorturl = removeParam(xurl, 'sortby',mode='extensible')
-    if (request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    if (('HTTP_ACCEPT' in request.META) and(request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json'))) or ('json' in request.session['requestParams']):
         ## Add info to the json dump if the request is for a single task
         if len(tasks) == 1:
             id = tasks[0]['jeditaskid']
@@ -3986,7 +3986,7 @@ def taskInfo(request, jeditaskid=0):
                     estaskstr += " %s(%s) " % ( s, estaskdict[jeditaskid][s] )
             taskrec['estaskstr'] = estaskstr
 
-    if (request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    if (('HTTP_ACCEPT' in request.META) and(request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json'))) or ('json' in request.session['requestParams']):
 
         del tasks
         del columns
@@ -4494,7 +4494,7 @@ def errorSummary(request):
 
 
     request.session['max_age_minutes'] = 6
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         nosorturl = removeParam(request.get_full_path(), 'sortby')
         xurl = extensibleURL(request)
         jobsurl = xurl.replace('/errors/','/jobs/')
@@ -4652,7 +4652,7 @@ def incidentList(request):
     del request.session['TFIRST']
     del request.session['TLAST']
 
-    if (request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    if (('HTTP_ACCEPT' in request.META) and(request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json'))) or ('json' in request.session['requestParams']):
         data = {
             'request' : request,
             'viewParams' : request.session['viewParams'],
@@ -4802,13 +4802,13 @@ def pandaLogger(request):
         'hours' : hours,
         'getrecs' : getrecs,
     }
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         ##self monitor
         endSelfMonitor(request)
         response = render_to_response('pandaLogger.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
-    if (request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
+    if (('HTTP_ACCEPT' in request.META) and(request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json'))) or ('json' in request.session['requestParams']):
         resp = data
         return  HttpResponse(json.dumps(resp), mimetype='text/html')
 
@@ -4867,7 +4867,7 @@ def workingGroups(request):
         wgsummary.append(wgs[wg])
     if len(wgsummary) == 0: wgsummary = None
 
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         xurl = extensibleURL(request)
         del request.session['TFIRST']
         del request.session['TLAST']
@@ -4951,7 +4951,7 @@ def datasetInfo(request):
             columns.append(pair)
     del request.session['TFIRST']
     del request.session['TLAST']
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         data = {
             'request' : request,
             'viewParams' : request.session['viewParams'],
@@ -4985,7 +4985,7 @@ def datasetList(request):
 
     del request.session['TFIRST']
     del request.session['TLAST']
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         data = {
             'viewParams' : request.session['viewParams'],
             'requestParams' : request.session['requestParams'],
@@ -5078,7 +5078,7 @@ def fileInfo(request):
             files = sorted(files, key=lambda k: (-k['jeditaskid'], k['startevent']))
 
 
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         data = {
             'request' : request,
             'viewParams' : request.session['viewParams'],
@@ -5136,7 +5136,7 @@ def fileList(request):
     nfiles = len(filed)
     del request.session['TFIRST']
     del request.session['TLAST']
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         data = {
             'request' : request,
             'viewParams' : request.session['viewParams'],
@@ -5168,7 +5168,7 @@ def workQueues(request):
 
     del request.session['TFIRST']
     del request.session['TLAST']
-    if (request.META.get('HTTP_ACCEPT') not in ('application/json')) and ('json' not in request.session['requestParams']):
+    if ( ('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') not in ('application/json'))) and ('json' not in request.session['requestParams']):
         data = {
             'request' : request,
             'viewParams' : request.session['viewParams'],
