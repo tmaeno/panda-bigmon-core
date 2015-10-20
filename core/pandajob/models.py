@@ -46,8 +46,6 @@ class GetRWWithPrioJedi3DAYS(models.Model):
     taskname = models.CharField(max_length=132, db_column='PRODSOURCELABEL')
     workinggroup = models.CharField(max_length=132, db_column='WORKINGGROUP')
 
-
-   
     def get_all_fields(self):
         """Returns a list of all field names on the instance."""
         fields = []
@@ -99,54 +97,6 @@ class RemainedEventsPerCloud3dayswind(models.Model):
     nrem = models.BigIntegerField(db_column='REMNORMEV')
     class Meta:
         db_table = u'"ATLAS_PANDABIGMON"."REMEVPCL3DAYSWIND"'
-
-
-class PreprocessGroupTypes(models.Model):
-    grouptypeid = models.BigIntegerField(primary_key=True, db_column='GROUPTYPEID')
-    fields = models.CharField(max_length=200, db_column='FIELDS', blank=True)
-    page = models.CharField(max_length=20, db_column='PAGE', blank=True)
-    class Meta:
-        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_GROUPTYPES"'
-
-class PreprocessGroups(models.Model):
-
-    groupid = models.BigIntegerField(primary_key=True, db_column='GROUPID')
-
-#    groupid = models.BigIntegerField(primary_key=True, db_column='GROUPID')
-    grouptypeid = models.BigIntegerField(db_column='GROUPTYPEID')
-#    grouptypeid = models.ForeignKey(PreprocessGroupTypes)
-    timelowerbound = models.DateTimeField(null=True, db_column="TIMELOWERBOUND")
-    timeupperbound = models.DateTimeField(null=True, db_column="TIMEUPPERBOUND")
-    lasttimeupdated = models.DateTimeField(null=True, db_column="LASTTIMEUPDATED")
-    jsondata = models.CharField(max_length=4000, blank=True, db_column="JSONDATA")
-
-    class Meta:
-        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_GROUPS"'
-
-class PreprocessKeys(models.Model):
-    id = models.BigIntegerField(primary_key=True, db_column='ID')
-    groupid = models.BigIntegerField(db_column='GROUPID')
-    fieldname = models.CharField(max_length=20, db_column='FIELDNAME', blank=True)
-    fieldvalue = models.CharField(max_length=20, db_column='FIELDVALUE', blank=True)
-    class Meta:
-        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_GROUPSKEYS"'
-
-
-class PreprocessQueues(models.Model):
-    preptaskid= models.BigIntegerField(primary_key=True, db_column='PREPTASKID')
-    grouptypeid = models.BigIntegerField(db_column='GROUPTYPEID')
-    jsondata = models.CharField(max_length=2000, db_column='JSONDATA', blank=True)
-    timeprepstarted = models.DateTimeField(null=True, db_column='TIMEPREPSTARTED')
-    class Meta:
-        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_QUEUES"'
-
-
-class PreprocessJobs(models.Model):
-    groupid = models.BigIntegerField(db_column='GROUPID')
-    pandaid = models.BigIntegerField(db_column='PANDAID')
-    class Meta:
-        db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_JOBS"'
-
 
 
 class PandaJob(models.Model):
