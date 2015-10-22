@@ -1964,6 +1964,14 @@ def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
     else:
         stdout = stderr = stdlog = None
 
+
+    filesSorted = []
+    filesSorted.extend(sorted([file for file in files if file['type'] == 'input'], key=lambda x:x['datasetname']))
+    filesSorted.extend(sorted([file for file in files if file['type'] == 'pseudo_input'], key=lambda x:x['datasetname']))
+    filesSorted.extend(sorted([file for file in files if file['type'] == 'output'], key=lambda x:x['datasetname']))
+    filesSorted.extend(sorted([file for file in files if file['type'] == 'log'], key=lambda x:x['datasetname']))
+    files = filesSorted
+
     ## Check for object store based log
     oslogpath = None
     if 'computingsite' in job and job['computingsite'] in objectStores:
