@@ -2960,9 +2960,22 @@ def wnInfo(request,site,wnname='all'):
         return response
     elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
         del request.session['TFIRST']
-        del request.session['TLAST']
-        resp = []
-        return  HttpResponse(json.dumps(resp), mimetype='text/html')
+        del request.session['TLAST']+
+        data = {
+            'request' : request,
+            'viewParams' : request.session['viewParams'],
+            'requestParams' : request.session['requestParams'],
+            'url' : request.path,
+            'site' : site,
+            'wnname' : wnname,
+            'user' : None,
+            'summary' : fullsummary,
+            'wnPlotFailed' : wnPlotFailedL,
+            'wnPlotFinished' : wnPlotFinishedL,
+            'hours' : LAST_N_HOURS_MAX,
+            'errthreshold' : errthreshold,
+        }
+        return  HttpResponse(json.dumps(data, cls=DateTimeEncoder), mimetype='text/html')
 
 def dashSummary(request, hours, limit=999999, view='all', cloudview='region', notime=True, preprocessParams=None):
     pilots = getPilotCounts(view)
