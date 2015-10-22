@@ -30,7 +30,8 @@ from django.db import connection, transaction
 from core.common.utils import getPrefix, getContextVariables, QuerySetChain
 from core.settings import STATIC_URL, FILTER_UI_ENV, defaultDatetimeFormat
 from core.pandajob.models import PandaJob, Jobsactive4, Jobsdefined4, Jobswaiting4, Jobsarchived4, Jobsarchived, \
-    GetRWWithPrioJedi3DAYS, PreprocessQueues, PreprocessGroupTypes, PreprocessGroups, PreprocessKeys, PreprocessJobs
+    GetRWWithPrioJedi3DAYS, PreprocessQueues, PreprocessGroupTypes, PreprocessGroups, PreprocessKeys, PreprocessJobs, \
+    RemainedEventsPerCloud3dayswind
 from resource.models import Schedconfig
 from core.common.models import Filestable4
 from core.common.models import Datasets
@@ -1901,7 +1902,7 @@ def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
     if 'nofiles' not in request.session['requestParams']:
         ## Get job files. First look in JEDI datasetcontents
         print "Pulling file info"
-        files.extend(JediDatasetContents.objects.filter(pandaid=pandaid).order_by('type').values())
+        files.extend(Filestable4.objects.filter(pandaid=pandaid).order_by('type').values())
         ninput = 0
         noutput = 0
         npseudo_input = 0
@@ -1927,7 +1928,6 @@ def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
                 if (i == 'input'): fileSummary += ', size: '+inputFilesSize+'(MB)'
                 fileSummary += '; '
             fileSummary = fileSummary[:-2]
-        files.extend(Filestable4.objects.filter(pandaid=pandaid).order_by('type').values())
         if len(files) == 0:
             files.extend(FilestableArch.objects.filter(pandaid=pandaid).order_by('type').values())
         if len(files) > 0:
@@ -3389,7 +3389,7 @@ def dashboard(request, view='production'):
         del request.session['TFIRST']
         del request.session['TLAST']
         resp = []
-        return  HttpResponse(json.dumps(resp), mimetype='text/html')
+        return HttpResponse(json.dumps(resp), mimetype='text/html')
 
 from django.template.defaulttags import register
 @register.filter
@@ -3484,8 +3484,15 @@ def dashTasks(request, hours, view='production'):
     elif (('HTTP_ACCEPT' in request.META) and request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json')) or ('json' in request.session['requestParams']):
         del request.session['TFIRST']
         del request.session['TLAST']
-        resp = []
-        return  HttpResponse(json.dumps(resp), mimetype='text/html')
+        remainingEvents = RemainedEventsPerCloud3dayswind.objects.values('cloud','nrem')
+        remainingEventsSet = {}
+        for remev in remainingEvents:
+            remainingEventsSet[remev['cloud']] = remev['nrem']
+        data = {
+            'jobsLeft' : jobsLeft,
+            'remainingWeightedEvents':remainingEventsSet,
+        }
+        return  HttpResponse(json.dumps(data), mimetype='text/html')
 
 @csrf_exempt
 @cache_page(60*6)
@@ -3912,6 +3919,13 @@ def taskInfo(request, jeditaskid=0):
                 if estaskdict[jeditaskid][s] > 0:
                     estaskstr += " %s(%s) " % ( s, estaskdict[jeditaskid][s] )
             taskrec['estaskstr'] = estaskstr
+
+    tquery = {}
+    tquery['jeditaskid'] = jeditaskid
+    tasksEventInfo = GetEventsForTask.objects.filter(**tquery).values('jeditaskid','totevrem', 'totev')
+    taskrec['totev'] = tasksEventInfo[0]['totev']
+    taskrec['totevproc'] = tasksEventInfo[0]['totev'] - tasksEventInfo[0]['totevrem']
+    taskrec['pctfinished'] = (100*taskrec['totevproc']/taskrec['totev']) if (taskrec['totev'] > 0) else ''
 
     if request.META.get('CONTENT_TYPE', 'text/plain') == 'application/json':
         del tasks
