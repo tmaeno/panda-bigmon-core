@@ -118,7 +118,7 @@ class PreprocessGroups(models.Model):
     timelowerbound = models.DateTimeField(null=True, db_column="TIMELOWERBOUND")
     timeupperbound = models.DateTimeField(null=True, db_column="TIMEUPPERBOUND")
     lasttimeupdated = models.DateTimeField(null=True, db_column="LASTTIMEUPDATED")
-    jsondata = models.TextField(blank=True, db_column="JSONDATA")
+    jsondata = models.CharField(max_length=4000, blank=True, db_column="JSONDATA")
 
     class Meta:
         db_table = u'"ATLAS_PANDABIGMON"."PREPROCESS_GROUPS"'
