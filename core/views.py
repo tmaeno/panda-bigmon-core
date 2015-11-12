@@ -3497,7 +3497,7 @@ def dashboard(request, view='production'):
             'view' : view,
             'mode' : 'site',
             'cloudview': cloudview,
-            'hours' : LAST_N_HOURS_MAX,
+            'hours' : hours,
             'errthreshold' : errthreshold,
             'cloudTaskSummary' : cloudTaskSummary ,
             'taskstates' : taskstatedict,
