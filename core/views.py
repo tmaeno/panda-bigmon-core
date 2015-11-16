@@ -1705,7 +1705,7 @@ def jobList(request, mode=None, param=None):
                         del job[field]
 
         data = {
-            "selectionsummury": sumd,
+            "selectionsummary": sumd,
             "jobs": jobs
         }
 
