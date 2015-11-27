@@ -2963,7 +2963,7 @@ def wnInfo(request,site,wnname='all'):
             'summary' : fullsummary,
             'wnPlotFailed' : wnPlotFailedL,
             'wnPlotFinished' : wnPlotFinishedL,
-            'hours' : LAST_N_HOURS_MAX,
+            'hours' : hours,
             'errthreshold' : errthreshold,
         }
         ##self monitor
@@ -2986,7 +2986,7 @@ def wnInfo(request,site,wnname='all'):
             'summary' : fullsummary,
             'wnPlotFailed' : wnPlotFailedL,
             'wnPlotFinished' : wnPlotFinishedL,
-            'hours' : LAST_N_HOURS_MAX,
+            'hours' : hours,
             'errthreshold' : errthreshold,
         }
         return  HttpResponse(json.dumps(data, cls=DateTimeEncoder), mimetype='text/html')
