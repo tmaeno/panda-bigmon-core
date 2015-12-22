@@ -3912,6 +3912,8 @@ def taskInfo(request, jeditaskid=0):
     columns = []
     jobsummary = []
     maxpss = []
+    maxrss = []
+
     if 'jeditaskid' in request.session['requestParams']: jeditaskid = int(request.session['requestParams']['jeditaskid'])
     if jeditaskid != 0:
         query = {'jeditaskid' : jeditaskid}
@@ -3920,14 +3922,14 @@ def taskInfo(request, jeditaskid=0):
 
             if 'eventservice' in tasks[0] and tasks[0]['eventservice'] == 1: eventservice = True
         if eventservice:
-            jobsummary,maxpss = jobSummary2(query, mode='eventservice')
+            jobsummary,maxpss,maxrss  = jobSummary2(query, mode='eventservice')
         else:
             ## Exclude merge jobs. Can be misleading. Can show failures with no downstream successes.
             exclude = {'processingtype' : 'pmerge' }
             mode='drop'
             if 'mode' in request.session['requestParams']:
                 mode= request.session['requestParams']['mode']
-            jobsummary,maxpss = jobSummary2(query, exclude=exclude, mode=mode)
+            jobsummary,maxpss,maxrss = jobSummary2(query, exclude=exclude, mode=mode)
     elif 'taskname' in request.session['requestParams']:
         querybyname = {'taskname' : request.session['requestParams']['taskname'] }
         tasks = JediTasks.objects.filter(**querybyname).values()
@@ -4229,6 +4231,8 @@ def taskInfo(request, jeditaskid=0):
         del request.session['TFIRST']
         del request.session['TLAST']
         data = {
+            'maxpss' : maxpss,
+            'maxrss' : maxrss,
             'request' : request,
             'viewParams' : request.session['viewParams'],
             'requestParams' : request.session['requestParams'],
@@ -4262,24 +4266,29 @@ def taskInfo(request, jeditaskid=0):
 def jobSummary2(query, exclude={}, mode='drop'):
     jobs = []
     jobs.extend(Jobsdefined4.objects.filter(**query).exclude(**exclude).\
-        values('pandaid','jobstatus','jeditaskid','processingtype','maxpss'))
+        values('pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'maxrss'))
     jobs.extend(Jobswaiting4.objects.filter(**query).exclude(**exclude).\
-        values('pandaid','jobstatus','jeditaskid','processingtype','maxpss'))
+        values('pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'maxrss'))
     jobs.extend(Jobsactive4.objects.filter(**query).exclude(**exclude).\
-        values('pandaid','jobstatus','jeditaskid','processingtype','maxpss'))
+        values('pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'maxrss'))
     jobs.extend(Jobsarchived4.objects.filter(**query).exclude(**exclude).\
-        values('pandaid','jobstatus','jeditaskid','processingtype','maxpss'))
+        values('pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'maxrss'))
     jobs.extend(Jobsarchived.objects.filter(**query).exclude(**exclude).\
-            values('pandaid','jobstatus','jeditaskid','processingtype','maxpss'))
+            values('pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'maxrss'))
     
     jobsSet = set()
     newjobs = []
     maxpss = []
+    maxrss = []
     for job in jobs:
         if not job['pandaid'] in jobsSet:
             jobsSet.add(job['pandaid'])
             newjobs.append(job)
-            maxpss.append(job['maxpss'])
+            if job['maxpss'] is not None:
+                maxpss.append(job['maxpss'])
+            if job['maxrss'] is not None:
+                maxrss.append(job['maxrss'])
+
     jobs = newjobs
     
     if mode == 'drop' and len(jobs) < 100000:
@@ -4338,7 +4347,7 @@ def jobSummary2(query, exclude={}, mode='drop'):
                 statecount['count'] += 1
                 continue
         jobstates.append(statecount)
-    return jobstates, maxpss
+    return jobstates, maxpss, maxrss
 
 def jobStateSummary(jobs):
     global statelist
