@@ -4167,7 +4167,7 @@ def runningProdTasks(request):
         }
         ##self monitor
         endSelfMonitor(request)
-        response = render_to_response('runningTasks.html', data, RequestContext(request))
+        response = render_to_response('runningProdTasks.html', data, RequestContext(request))
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes']*60)
         return response
 
