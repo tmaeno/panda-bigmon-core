@@ -1,4 +1,3 @@
-
 import logging, re, json, commands, os, copy
 from datetime import datetime, timedelta
 import time
@@ -3444,10 +3443,8 @@ def worldjobs(request):
     worldTasksSummary.extend(JobsWorldView.objects.filter(**query).values(*values))
     nucleus = {}
     statelist1 = statelist
-#    del statelist1[statelist1.index('closed')]
+#    del statelist1[statelist1.index('jclosed')]
 #    del statelist1[statelist1.index('pending')]
-
-
 
     if len(worldTasksSummary) > 0:
         for jobs in worldTasksSummary:
