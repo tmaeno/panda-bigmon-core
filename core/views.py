@@ -3899,7 +3899,10 @@ def taskList(request):
 
 
     ## For event service, pull the jobs and event ranges
-    if eventservice:        
+
+    doESCalc = False
+
+    if eventservice and doESCalc:
         taskl = []
         for task in tasks:
             taskl.append(task['jeditaskid'])
