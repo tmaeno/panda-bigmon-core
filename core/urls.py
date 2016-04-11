@@ -49,16 +49,17 @@ urlpatterns = patterns('',
     url(r'^datasetList/$', coremon_views.datasetList, name='datasetList'),
     url(r'^workQueues/$', coremon_views.workQueues, name='workQueues'),
     url(r'^preprocess/$', coremon_views.preProcess, name='preprocess'),
-    url(r'^errors2/$', coremon_views.errorSummary2, name='errorSummary2'),
-    url(r'^g4exceptions/$', coremon_views.g4exceptions, name='g4exceptions'),
 
     url(r'^g4exceptions/$', coremon_views.g4exceptions, name='g4exceptions'),
     url(r'^worldjobs/$', coremon_views.worldjobs, name='worldjobs'),
     url(r'^runningprodtasks/$', coremon_views.runningProdTasks, name='runningProdTasks'),
     url(r'^worldhs06s/$', coremon_views.worldhs06s, name='worldHS06s'),
 
-#    url(r'^preprocessdata/$', coremon_views.preprocessData, name='preprocessdata'),
-    ### data product catalog prototyping
+    url(r'^taskESExtendedInfo/$', coremon_views.taskESExtendedInfo, name='taskESExtendedInfo'),
+
+                       #    url(r'^preprocessdata/$', coremon_views.preprocessData, name='preprocessdata'),
+
+    ### data product catalog prototyping                                                                                                                                                         
     url(r'^dp/$', dpviews.doRequest, name='doRequest'),
 
     ### filebrowser
