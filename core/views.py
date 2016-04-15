@@ -1362,7 +1362,7 @@ def extensibleURL(request, xurl = ''):
     #    xurl += "jobtype=%s&" % requestParams['jobtype']
     return xurl
 
-@cache_page(60*6)
+@cache_page(60*20)
 def mainPage(request):
     valid, response = initRequest(request)
     if not valid: return response
@@ -1483,7 +1483,7 @@ def jobParamList(request):
     else:
         return HttpResponse('not supported', mimetype='text/html')
 
-@cache_page(60*6)
+@cache_page(60*20)
 def jobList(request, mode=None, param=None):
 
     valid, response = initRequest(request)
@@ -1936,7 +1936,7 @@ def getSequentialRetries_ES(pandaid, jobsetid, jeditaskid, countOfInvocations, r
 
 
 @csrf_exempt
-@cache_page(60*6)
+@cache_page(60*20)
 def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
     valid, response = initRequest(request)
     if not valid: return response
@@ -2472,7 +2472,7 @@ def userList(request):
         resp = sumd
         return  HttpResponse(json.dumps(resp), mimetype='text/html')
 
-@cache_page(60*6)
+@cache_page(60*20)
 def userInfo(request, user=''):
     valid, response = initRequest(request)
     if not valid: return response
@@ -2642,7 +2642,7 @@ def userInfo(request, user=''):
         resp = sumd
         return  HttpResponse(json.dumps(resp), mimetype='text/html')
 
-@cache_page(60*6)
+@cache_page(60*20)
 def siteList(request):
     valid, response = initRequest(request)
     if not valid: return response
@@ -2954,7 +2954,7 @@ def wnSummary(query):
     summary.extend(Jobsarchived4.objects.filter(**query).values('modificationhost', 'jobstatus').annotate(Count('jobstatus')).order_by('modificationhost', 'jobstatus'))
     return summary
 
-@cache_page(60*6)
+@cache_page(60*20)
 def wnInfo(request,site,wnname='all'):
     """ Give worker node level breakdown of site activity. Spot hot nodes, error prone nodes. """
     valid, response = initRequest(request)
@@ -3558,7 +3558,7 @@ def calculateRWwithPrio_JEDI(query):
     return retRWMap, retNREMJMap
 
 
-@cache_page(60*6)
+@cache_page(60*20)
 def worldjobs(request):
     valid, response = initRequest(request)
     query = {}
@@ -3632,7 +3632,7 @@ def worldjobs(request):
 
         return HttpResponse(json.dumps(data, cls=DateEncoder), mimetype='text/html')
 
-@cache_page(60*6)
+@cache_page(60*20)
 def worldhs06s(request):
     valid, response = initRequest(request)
     roundflag=False
@@ -3762,7 +3762,7 @@ def worldhs06s(request):
 
 
 
-@cache_page(60*6)
+@cache_page(60*20)
 def dashboard(request, view='production'):
     valid, response = initRequest(request)
     if not valid: return response
@@ -4019,7 +4019,7 @@ def dashTasks(request, hours, view='production'):
         }
         return  HttpResponse(json.dumps(data), mimetype='text/html')
 
-@cache_page(60*6)
+@cache_page(60*20)
 def taskESExtendedInfo(request):
 
     if 'jeditaskid' in request.REQUEST:
@@ -4089,7 +4089,7 @@ def taskESExtendedInfo(request):
 
 
 @csrf_exempt
-@cache_page(60*6)
+@cache_page(60*20)
 def taskList(request):
     valid, response = initRequest(request)
     if 'limit' in request.session['requestParams']:
@@ -4310,7 +4310,7 @@ def getTaskScoutingInfo(tasks,nmax):
 
     return tasks
 
-@cache_page(60*6)
+@cache_page(60*20)
 def runningProdTasks(request):
     valid, response = initRequest(request)
     xurl = extensibleURL(request)
@@ -4566,7 +4566,7 @@ def getBrokerageLog(request):
         print message
 
 
-@cache_page(60*6)
+@cache_page(60*20)
 def taskInfo(request, jeditaskid=0):
     jeditaskid = int(jeditaskid)
     valid, response = initRequest(request)
@@ -5316,7 +5316,7 @@ def getTaskName(tasktype,taskid):
 
 
 
-@cache_page(60*6)
+@cache_page(60*20)
 def errorSummary(request):
     valid, response = initRequest(request)
     if not valid: return response
@@ -5508,7 +5508,7 @@ def removeParam(urlquery, parname, mode='complete'):
             if urlquery.endswith('?') or urlquery.endswith('&'): urlquery = urlquery[:len(urlquery)-1]
     return urlquery
 
-@cache_page(60*6)
+@cache_page(60*20)
 def incidentList(request):
     valid, response = initRequest(request)
     if not valid: return response
@@ -5629,7 +5629,7 @@ def incidentList(request):
         jsonResp = json.dumps(clearedInc)
         return  HttpResponse(jsonResp, mimetype='text/html')
 
-cache_page(60*6)
+cache_page(60*20)
 def esPandaLogger(request):
     valid, response = initRequest(request)
     if not valid: return response
@@ -5699,7 +5699,7 @@ def esPandaLogger(request):
         response = render_to_response('esPandaLogger.html', data, RequestContext(request))
         return response
 
-cache_page(60*6)
+cache_page(60*20)
 def pandaLogger(request):
     valid, response = initRequest(request)
     if not valid: return response
@@ -5839,7 +5839,7 @@ def pandaLogger(request):
         resp = data
         return  HttpResponse(json.dumps(resp, cls=DateEncoder), mimetype='text/html')
 
-@cache_page(60*6)
+@cache_page(60*20)
 def workingGroups(request):
     valid, response = initRequest(request)
     if not valid: return response
@@ -6321,7 +6321,7 @@ def fileList(request):
     else:
         return  HttpResponse(json.dumps(files), mimetype='text/html')
 
-@cache_page(60*6)
+@cache_page(60*20)
 def workQueues(request):
     valid, response = initRequest(request)
     if not valid: return response
