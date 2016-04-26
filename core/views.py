@@ -4598,8 +4598,8 @@ def taskInfo(request, jeditaskid=0):
             if 'mode' in request.session['requestParams'] and request.session['requestParams']['mode'] == 'drop': mode = 'drop'
             if 'mode' in request.session['requestParams'] and request.session['requestParams']['mode'] == 'nodrop': mode = 'nodrop'
 
-            jobsummary,maxpss,walltime,sitepss,sitewalltime,maxpssf,walltimef,sitepssf,sitewalltimef  = jobSummary2(query, exclude={}, mode=mode, isEventService=True, substatusfilter='non_es_merge')
-            jobsummaryESMerge, maxpssESM,walltimeESM,sitepssESM,sitewalltimeESM,maxpssfESM,walltimefESM,sitepssfESM,sitewalltimefESM = jobSummary2(query, exclude={}, mode=mode, isEventService=True, substatusfilter='es_merge')
+            jobsummary,maxpss,walltime,sitepss,sitewalltime,maxpssf,walltimef,sitepssf,sitewalltimef, maxpsspercore, maxpssfpercore  = jobSummary2(query, exclude={}, mode=mode, isEventService=True, substatusfilter='non_es_merge')
+            jobsummaryESMerge, maxpssESM,walltimeESM,sitepssESM,sitewalltimeESM,maxpssfESM,walltimefESM,sitepssfESM,sitewalltimefESM, maxpsspercoreESM, maxpssfpercoreESM = jobSummary2(query, exclude={}, mode=mode, isEventService=True, substatusfilter='es_merge')
 
         else:
             ## Exclude merge jobs. Can be misleading. Can show failures with no downstream successes.
@@ -4607,7 +4607,7 @@ def taskInfo(request, jeditaskid=0):
             mode='drop'
             if 'mode' in request.session['requestParams']:
                 mode= request.session['requestParams']['mode']
-            jobsummary,maxpss,walltime,sitepss,sitewalltime,maxpssf,walltimef,sitepssf,sitewalltimef = jobSummary2(query, exclude=exclude, mode=mode)
+            jobsummary,maxpss,walltime,sitepss,sitewalltime,maxpssf,walltimef,sitepssf,sitewalltimef, maxpsspercore, maxpssfpercore = jobSummary2(query, exclude=exclude, mode=mode)
     elif 'taskname' in request.session['requestParams']:
         querybyname = {'taskname' : request.session['requestParams']['taskname'] }
         tasks = JediTasks.objects.filter(**querybyname).values()
@@ -4930,6 +4930,8 @@ def taskInfo(request, jeditaskid=0):
             'walltimef' : walltimef,
             'sitepssf': json.dumps(sitepssf),
             'sitewalltimef': json.dumps(sitewalltimef),
+            'maxpsspercore': maxpsspercore,
+            'maxpssfpercore': maxpssfpercore,
             'request' : request,
             'viewParams' : request.session['viewParams'],
             'requestParams' : request.session['requestParams'],
@@ -4974,16 +4976,16 @@ def jobSummary2(query, exclude={}, mode='drop', isEventService=False,  substatus
     #Here we apply sort for implem rule about two jobs in Jobsarchived and Jobsarchived4 with 'finished' and closed statuses
 
     jobs.extend(Jobsarchived.objects.filter(**newquery).exclude(**exclude).\
-        values('modificationtime', 'jobsubstatus','pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'starttime', 'endtime', 'computingsite', 'jobsetid'))
+        values('modificationtime', 'jobsubstatus','pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'starttime', 'endtime', 'corecount', 'computingsite', 'jobsetid'))
 
     jobs.extend(Jobsdefined4.objects.filter(**newquery).exclude(**exclude).\
-        values('modificationtime', 'jobsubstatus', 'pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'starttime', 'endtime', 'computingsite', 'jobsetid'))
+        values('modificationtime', 'jobsubstatus', 'pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'starttime', 'endtime', 'corecount', 'computingsite', 'jobsetid'))
     jobs.extend(Jobswaiting4.objects.filter(**newquery).exclude(**exclude).\
-        values('modificationtime', 'jobsubstatus','pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'starttime', 'endtime', 'computingsite', 'jobsetid'))
+        values('modificationtime', 'jobsubstatus','pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'starttime', 'endtime', 'corecount', 'computingsite', 'jobsetid'))
     jobs.extend(Jobsactive4.objects.filter(**newquery).exclude(**exclude).\
-        values('modificationtime', 'jobsubstatus','pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'starttime', 'endtime', 'computingsite', 'jobsetid'))
+        values('modificationtime', 'jobsubstatus','pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'starttime', 'endtime', 'corecount', 'computingsite', 'jobsetid'))
     jobs.extend(Jobsarchived4.objects.filter(**newquery).exclude(**exclude).\
-        values('modificationtime', 'jobsubstatus','pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'starttime', 'endtime', 'computingsite', 'jobsetid'))
+        values('modificationtime', 'jobsubstatus','pandaid','jobstatus','jeditaskid','processingtype','maxpss', 'starttime', 'endtime', 'corecount', 'computingsite', 'jobsetid'))
 
     jobsSet = {}
     newjobs = []
@@ -5044,10 +5046,12 @@ def jobSummary2(query, exclude={}, mode='drop', isEventService=False,  substatus
 
 
     maxpss = []
+    maxpsspercore = []
     walltime = []
     sitepss = []
     sitewalltime = []
     maxpssf = []
+    maxpssfpercore = []
     walltimef = []
     sitepssf = []
     sitewalltimef = []
@@ -5055,9 +5059,11 @@ def jobSummary2(query, exclude={}, mode='drop', isEventService=False,  substatus
         if job['maxpss'] is not None and job['maxpss'] != -1:
             if job['jobstatus']== 'finished':
                 maxpss.append(job['maxpss']/1024)
+                maxpsspercore.append(job['maxpss']/1024/job['corecount'])
                 sitepss.append(job['computingsite'])
             if job['jobstatus'] == 'failed':
                 maxpssf.append(job['maxpss']/1024)
+                maxpssfpercore.append(job['maxpss']/1024/job['corecount'])
                 sitepssf.append(job['computingsite'])
         if 'endtime' in job and 'starttime' in job and job['starttime'] and job['endtime']:
             starttime = job['starttime']
@@ -5084,7 +5090,7 @@ def jobSummary2(query, exclude={}, mode='drop', isEventService=False,  substatus
                 statecount['count'] += 1
                 continue
         jobstates.append(statecount)
-    return jobstates, maxpss, walltime, sitepss, sitewalltime, maxpssf, walltimef, sitepssf, sitewalltimef
+    return jobstates, maxpss, walltime, sitepss, sitewalltime, maxpssf, walltimef, sitepssf, sitewalltimef, maxpsspercore, maxpssfpercore
 
 def jobStateSummary(jobs):
     global statelist
