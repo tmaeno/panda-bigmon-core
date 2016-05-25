@@ -1606,9 +1606,9 @@ def jobList(request, mode=None, param=None):
                     if (hashRetries[job['pandaid']]['relationtype'] == ('retry')):
                         dropJob = 1
 
-                    if (hashRetries[job['pandaid']]['relationtype'] == 'es_merge' and (
-                        job['jobsubstatus'] == 'es_merge')):
-                        dropJob = 1
+                #    if (hashRetries[job['pandaid']]['relationtype'] == 'es_merge' and (
+                #        job['jobsubstatus'] == 'es_merge')):
+                #        dropJob = 1
 
                 if (dropJob == 0):
                     if (job['jobsetid'] in hashRetries) and (
@@ -5254,8 +5254,8 @@ def jobSummary2(query, exclude={}, mode='drop', isEventServiceFlag=False,  subst
                         if (hashRetries[job['pandaid']]['relationtype'] == ('retry')):
                             dropJob = 1
 
-                        if (hashRetries[job['pandaid']]['relationtype'] == 'es_merge' and (job['jobsubstatus'] == 'es_merge')):
-                            dropJob = 1
+                     #   if (hashRetries[job['pandaid']]['relationtype'] == 'es_merge' and (job['jobsubstatus'] == 'es_merge')):
+                     #       dropJob = 1
 
                     if (dropJob == 0):
                         if (job['jobsetid'] in hashRetries) and (
