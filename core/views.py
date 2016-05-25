@@ -1615,6 +1615,9 @@ def jobList(request, mode=None, param=None):
                                 hashRetries[job['jobsetid']]['relationtype'] in ('jobset_retry')):
                         dropJob = 1
 
+                    if (job['jobstatus'] == 'closed' and (job['jobsubstatus'] in ('es_unused','es_inaction'))):
+                        dropJob = 1
+
                         #               if 'jobstatus' in request.session['requestParams'] and request.session['requestParams'][
 #                   'jobstatus'] == 'cancelled' and job['jobstatus'] != 'cancelled':
 #                   dropJob = 1
@@ -5262,9 +5265,8 @@ def jobSummary2(query, exclude={}, mode='drop', isEventServiceFlag=False,  subst
                                 hashRetries[job['jobsetid']]['relationtype'] in ('jobset_retry')):
                             dropJob = 1
 
-
-
-
+                    if (job['jobstatus'] == 'closed' and (job['jobsubstatus'] in ('es_unused', 'es_inaction'))):
+                        dropJob = 1
 
                 if (dropJob == 0):
                     if not (job['processingtype'] == 'pmerge'):
