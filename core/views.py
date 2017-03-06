@@ -1964,9 +1964,10 @@ def getJobList(request,requesttoken=None):
         #     'requesttoken']
     else:
         sqlRequest = "SELECT * FROM ATLAS_PANDABIGMON.JOBSPAGE_CUMULATIVE_RESULT WHERE REQUEST_TOKEN=%s" % int(requesttoken)
-        cur.execute(sqlRequest)
-        rawsummary = cur.fetchall()
-        time.sleep(10)
+        while len(rawsummary) == 0:
+            cur.execute(sqlRequest)
+            rawsummary = cur.fetchall()
+            time.sleep(10)
         njobsmax = 1000000000
         # if 'requesttoken' not in request.session:
         #     request.session['requesttoken'] = requesttoken
@@ -2085,7 +2086,6 @@ def getJobList(request,requesttoken=None):
             jobs.extend(Jobsarchived.objects.filter(**newquery).values(*values))
 
 
-    print len(jobs)
     if 'requestParams' in request.session and 'sortby' in request.session['requestParams']:
         sortby = request.session['requestParams']['sortby']
         if sortby == 'time-ascending':
@@ -2126,7 +2126,6 @@ def getJobList(request,requesttoken=None):
 
     jobs = cleanJobListLite(request, jobs)
 
-    print len(jobs)
     jobtype = ''
     if 'requestParams' in request.session and 'jobtype' in request.session['requestParams']:
         jobtype = request.session['requestParams']['jobtype']
@@ -2268,14 +2267,13 @@ def getJobList(request,requesttoken=None):
                     else:
                         del job[field]
         if doRefresh == True:
-            data=getJobList(request, int(requesttoken))
-        else:
-            print len(jobs)
-            data = {
-            "selectionsummary": sumd,
-            "jobs": jobs,
-            "errsByCount": errsByCount,
-            }
+            getJobList(request, int(requesttoken))
+
+        data = {
+        "selectionsummary": sumd,
+        "jobs": jobs,
+        "errsByCount": errsByCount,
+        }
     return data
 
 def jobListPDiv(request, mode=None, param=None):
