@@ -6230,6 +6230,9 @@ def runningMCProdTasks(request):
         endSelfMonitor(request)
         return response
 
+    #from reports import RunningMCProdTasks
+    #mcReport = RunningMCProdTasks.RunningMCProdTasks()
+    #mcReport.prepareReport("MC16", 100, True)
 
     # xurl = extensibleURL(request)
     xurl = request.get_full_path()
@@ -8320,16 +8323,14 @@ def pandaLogger(request):
         hours = int(request.session['requestParams']['hours'])
     setupView(request, hours=hours, limit=9999999)
 
-    if 'startdate' in request.session['requestParams']:
+    startdate = timezone.now() - timedelta(hours=hours)
+    startdate = startdate.strftime(defaultDatetimeFormat)
+    if 'startdate' in request.session['requestParams'] and len(request.session['requestParams']['startdate']) > 1:
         startdate = request.session['requestParams']['startdate']
-    else:
-        startdate = timezone.now() - timedelta(hours=hours)
-        startdate = startdate.strftime(defaultDatetimeFormat)
 
-    if 'enddate' in request.session['requestParams']:
+    enddate = timezone.now().strftime(defaultDatetimeFormat)
+    if 'enddate' in request.session['requestParams'] and len(request.session['requestParams']['startdate']) > 1:
         enddate = request.session['requestParams']['enddate']
-    else:
-        enddate = timezone.now().strftime(defaultDatetimeFormat)
 
     iquery['bintime__range'] = [startdate, enddate]
     print iquery
