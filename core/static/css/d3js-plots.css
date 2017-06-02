@@ -99,7 +99,7 @@
     top: -130px;
     width: 100px;
     height: 50px;
-    z-index: 0;
+    z-index: 10;
       }
 .tooltippiechartgs {
     background: #f1f0f1;
@@ -107,14 +107,14 @@
     color: #333;
     font-family: sans-serif;
     font-size: 14px;
-    left: 115px;
+    left: 140px;
     padding: 10px;
-    position: relative;
+    position: absolute;
     text-align: center;
-    top: -230px;
-    width: 170px;
+    top: 170px;
+    width: 150px;
     height: 70px;
-    z-index: 0;
+    z-index: 10;
       }
 
 .target { fill: #fff; stroke: #000; stroke-width: 2px; }
