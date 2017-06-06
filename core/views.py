@@ -152,6 +152,7 @@ LAST_N_HOURS_MAX = 0
 PLOW = 1000000
 PHIGH = -1000000
 
+DEFAULTFAILEDJOBSSUPPRESSIONRUNTINE = 10
 
 standard_fields = ['processingtype', 'computingsite', 'jobstatus', 'prodsourcelabel', 'produsername', 'jeditaskid',
                    'workinggroup', 'transformation', 'cloud', 'homepackage', 'inputfileproject', 'inputfiletype',
@@ -166,25 +167,6 @@ standard_taskfields = ['workqueue_id', 'tasktype', 'superstatus', 'status', 'cor
 VOLIST = ['atlas', 'bigpanda', 'htcondor', 'core', 'aipanda']
 VONAME = {'atlas': 'ATLAS', 'bigpanda': 'BigPanDA', 'htcondor': 'HTCondor', 'core': 'LSST', '': ''}
 VOMODE = ' '
-
-
-
-def jobSuppression(request):
-
-    extra = '(1=1)'
-
-    if not 'notsuppress' in request.session['requestParams']:
-        suppressruntime = 10
-        if 'suppressruntime' in request.session['requestParams']:
-            try:
-                suppressruntime = int(request.session['requestParams']['suppressruntime'])
-            except:
-                pass
-            extra = '( not( (JOBDISPATCHERERRORCODE=100 OR ' \
-                    'PILOTERRORCODE in (1200, 1201, 1202, 1203, 1204, 1206, 1207) ) and ((ENDTIME-STARTTIME)*24*60 < ' + str(
-            suppressruntime) + ')))'
-    return extra
-
 
 def getObjectStoresNames():
     global objectStoresNames
@@ -5012,15 +4994,10 @@ def dashSummary(request, hours, limit=999999, view='all', cloudview='region', no
         extra = "(not eventservice is null and eventservice=2 and not specialhandling like '%%sc:%%')"
 
     sitesummarydata = siteSummary(query, notime, extra)
-
     nojobabs = Sitedata.objects.filter(hours=3).values('site').annotate(dcount=Sum('nojobabs'))
-
     nojobabshash = {}
-    try:
-        for item in nojobabs:
-            nojobabshash[item['site']] = item['dcount']
-    except:
-        pass
+    for item in nojobabs:
+        nojobabshash[item['site']] = item['dcount']
 
 
     mismatchedSites = []
@@ -5894,7 +5871,16 @@ def dashboard(request, view='production'):
         if 'es' in request.session['requestParams'] and request.session['requestParams']['es'].upper() == 'TRUE':
             query['es'] = 1
             estailtojobslinks = '&eventservice=eventservice'
-            extra = jobSuppression(request)
+
+            if not 'notsuppress' in request.session['requestParams']:
+                suppressruntime = DEFAULTFAILEDJOBSSUPPRESSIONRUNTINE
+                if 'suppressruntime' in request.session['requestParams']:
+                    try:
+                        suppressruntime = int(request.session['requestParams'])
+                    except:
+                        pass
+                extra = '( not( (JOBDISPATCHERERRORCODE=100 OR PILOTERRORCODE=1201) and ((ENDTIME-STARTTIME)*24*60 < '+str(suppressruntime)+')))'
+
 
         if 'es' in request.session['requestParams'] and request.session['requestParams']['es'].upper() == 'FALSE':
             query['es'] = 0
@@ -7651,7 +7637,16 @@ def taskInfo(request, jeditaskid=0):
             if 'mode' in request.session['requestParams'] and request.session['requestParams'][
                 'mode'] == 'nodrop': mode = 'nodrop'
 
-            extra = jobSuppression(request)
+            extra = "(1=1)"
+            if not 'notsuppress' in request.session['requestParams']:
+                suppressruntime = DEFAULTFAILEDJOBSSUPPRESSIONRUNTINE
+                if 'suppressruntime' in request.session['requestParams']:
+                    try:
+                        suppressruntime = int(request.session['requestParams'])
+                    except:
+                        pass
+                extra = '( not( (JOBDISPATCHERERRORCODE=100 OR PILOTERRORCODE=1201) and ((ENDTIME-STARTTIME)*24*60 < '+str(suppressruntime)+')))'
+
 
             plotsDict, jobsummary, eventssummary, transactionKey, jobScoutIDs, hs06sSum = jobSummary2(
                 query, exclude={}, extra=extra, mode=mode, isEventServiceFlag=True, substatusfilter='non_es_merge')
@@ -10498,14 +10493,11 @@ def getPilotCounts(view):
     query['hours'] = 3
     rows = Sitedata.objects.filter(**query).values()
     pilotd = {}
-    try:
-        for r in rows:
-            site = r['site']
-            if not site in pilotd: pilotd[site] = {}
-            pilotd[site]['count'] = r['getjob'] + r['updatejob']
-            pilotd[site]['time'] = r['lastmod']
-    except:
-        pass
+    for r in rows:
+        site = r['site']
+        if not site in pilotd: pilotd[site] = {}
+        pilotd[site]['count'] = r['getjob'] + r['updatejob']
+        pilotd[site]['time'] = r['lastmod']
     return pilotd
 
 
