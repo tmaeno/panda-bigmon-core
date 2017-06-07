@@ -43,10 +43,8 @@ class TaskProgressPlot:
 
     def get_raw_task_profile_fresh(self,taskid):
         cur = connection.cursor()
-        cur.execute("SELECT  * FROM ("
-                    "SELECT DISTINCT starttime, creationtime, endtime, pandaid, jeditaskid, EVENTSERVICE FROM JOBSARCHIVED WHERE JEDITASKID={0} and JOBSTATUS='finished' UNION ALL "
-                    "SELECT DISTINCT starttime, creationtime, endtime, pandaid, jeditaskid, EVENTSERVICE FROM JOBSARCHIVED4 WHERE JEDITASKID={0} and JOBSTATUS='finished'"
-                    ")t ORDER BY pandaid asc".format(taskid))
+        cur.execute("SELECT DISTINCT starttime, creationtime, endtime, pandaid, jeditaskid, EVENTSERVICE FROM JOBSARCHIVED WHERE JEDITASKID={0} and JOBSTATUS='finished' UNION ALL "
+                    "SELECT DISTINCT starttime, creationtime, endtime, pandaid, jeditaskid, EVENTSERVICE FROM JOBSARCHIVED4 WHERE JEDITASKID={0} and JOBSTATUS='finished'".format(taskid))
         rows = cur.fetchall()
 
         starttime_run = []
@@ -130,7 +128,7 @@ class TaskProgressPlot:
 
     def make_verbose_profile_graph(self,frame, taskid, status=None, daterange=None):
         plt.style.use('fivethirtyeight')
-        fig = plt.figure(figsize=(20, 18))
+        fig = plt.figure(figsize=(20, 15))
         plt.locator_params(axis='x', nbins=30)
         plt.locator_params(axis='y', nbins=30)
         if status is not None:
@@ -144,10 +142,10 @@ class TaskProgressPlot:
 
         if len(frame['merge'].values[:,0:2])>0:
             mint = min(frame['run'].values[:,0:2].min(), frame['merge'].values[:,0:2].min(), taskstart)
-            maxt = max(frame['run'].values[:, 0:3].max(), frame['merge'].values[:, 0:3].max())
+            maxt = max(frame['run'].values[:, 0:2].max(), frame['merge'].values[:, 0:2].max())
         else:
-            mint = min(frame['run'].values[:,0:3].min(), taskstart)
-            maxt = frame['run'].values[:, 0:3].max()
+            mint = min(frame['run'].values[:,0:2].min(), taskstart)
+            maxt = frame['run'].values[:, 0:2].max()
 
         plt.xlim(xmax=maxt)
         plt.xlim(xmin=mint)
