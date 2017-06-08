@@ -142,25 +142,3 @@ hr {
 .dropdownplots:hover .dropdownbutton {
     background-color: #222222;
 }
-
-.bluebutton {
-  display: inline-block;
-  min-width: 100px;
-  text-align: center;
-  font-size: 14px;
-  font-weight: bold;
-  text-decoration: none;
-  background-color: rgba(53,86,129, 0.8);
-  color: white !important;
-  padding: 10px;
-}
-
-.row.left-aligned {
-    margin: 0;
-    padding: 0;
-}
-.column.left-aligned {
-margin-left: 0;
-margin-right: 0;
-padding: 0;
-float: none !important; }
