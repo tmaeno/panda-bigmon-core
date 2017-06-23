@@ -4601,6 +4601,7 @@ def siteInfo(request, site=''):
 
     if (not (('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('application/json'))) and (
         'json' not in request.session['requestParams'])):
+        nickName = ''
         attrs = []
         if siterec:
             attrs.append({'name': 'GOC name', 'value': siterec.gocname})
@@ -4623,6 +4624,7 @@ def siteInfo(request, site=''):
 
             if siterec.nickname != site:
                 attrs.append({'name': 'Queue (nickname)', 'value': siterec.nickname})
+                nickName = siterec.nickname
             if len(sites) > 1:
                 attrs.append({'name': 'Total queues for this site', 'value': len(sites)})
             attrs.append({'name': 'Status', 'value': siterec.status})
@@ -4666,6 +4668,7 @@ def siteInfo(request, site=''):
             'attrs': attrs,
             'incidents': incidents,
             'name': site,
+            'nickName': nickName,
             'njobhours': njobhours,
             'built': datetime.now().strftime("%H:%M:%S"),
         }
