@@ -58,7 +58,7 @@ from core.common.models import JediEvents
 from core.common.models import JediDatasets
 from core.common.models import JediDatasetContents
 from core.common.models import JediWorkQueue
-from core.common.models import RequestStat, BPUser, Visits, BPUserSettings
+from core.common.models import RequestStat, BPUser, Visits
 from core.settings.config import ENV
 from core.common.models import RunningMCProductionTasks
 from core.common.models import RunningDPDProductionTasks, RunningProdTasksModel
@@ -156,14 +156,12 @@ PHIGH = -1000000
 standard_fields = ['processingtype', 'computingsite', 'jobstatus', 'prodsourcelabel', 'produsername', 'jeditaskid',
                    'workinggroup', 'transformation', 'cloud', 'homepackage', 'inputfileproject', 'inputfiletype',
                    'attemptnr', 'specialhandling', 'priorityrange', 'reqid', 'minramcount', 'eventservice',
-                   'jobsubstatus', 'nucleus']
+                   'jobsubstatus', 'nucleus','gshare']
 standard_sitefields = ['region', 'gocname', 'nickname', 'status', 'tier', 'comment_field', 'cloud', 'allowdirectaccess',
                        'allowfax', 'copytool', 'faxredirector', 'retry', 'timefloor']
 standard_taskfields = ['workqueue_id', 'tasktype', 'superstatus', 'status', 'corecount', 'taskpriority', 'username', 'transuses',
                        'transpath', 'workinggroup', 'processingtype', 'cloud', 'campaign', 'project', 'stream', 'tag',
                        'reqid', 'ramcount', 'nucleus', 'eventservice', 'gshare']
-standard_errorfields = ['cloud', 'computingsite', 'produsername', 'taskid', 'jeditaskid', 'processingtype', 'prodsourcelabel',
-             'transformation', 'workinggroup', 'specialhandling', 'jobstatus']
 
 VOLIST = ['atlas', 'bigpanda', 'htcondor', 'core', 'aipanda']
 VONAME = {'atlas': 'ATLAS', 'bigpanda': 'BigPanDA', 'htcondor': 'HTCondor', 'core': 'LSST', '': ''}
@@ -249,8 +247,8 @@ def initRequest(request):
 
     VOMODE = ''
     if dbaccess['default']['ENGINE'].find('oracle') >= 0:
-        # VOMODE = 'atlas'
-        VOMODE = 'devtest'
+        VOMODE = 'atlas'
+        # VOMODE = 'devtest'
     request.session['IS_TESTER'] = False
 
     if VOMODE == 'atlas':
@@ -274,15 +272,15 @@ def initRequest(request):
                     user.set_unusable_password()
                     user.save()
 
-    if VOMODE == 'devtest':
-        request.session['ADFS_FULLNAME'] = ''
-        request.session['ADFS_EMAIL'] = ''
-        request.session['ADFS_FIRSTNAME'] = ''
-        request.session['ADFS_LASTNAME'] = ''
-        request.session['ADFS_LOGIN'] = 'tkorchug'
-        # user = None
-        user = BPUser.objects.get(username=request.session['ADFS_LOGIN'])
-        request.session['IS_TESTER'] = user.is_tester
+    # if VOMODE == 'devtest':
+    #     request.session['ADFS_FULLNAME'] = ''
+    #     request.session['ADFS_EMAIL'] = ''
+    #     request.session['ADFS_FIRSTNAME'] = ''
+    #     request.session['ADFS_LASTNAME'] = ''
+    #     request.session['ADFS_LOGIN'] = ''
+    #     user = None
+    #     user = BPUser.objects.get(username=request.session['ADFS_LOGIN'])
+    #     request.session['IS_TESTER'] = user.is_tester
 
 
     viewParams = {}
@@ -868,40 +866,6 @@ def setupView(request, opmode='', hours=0, limit=-99, querytype='job', wildCardE
 
     return (query, extraQueryString, LAST_N_HOURS_MAX)
 
-
-def saveUserSettings(request, page):
-
-    if page == 'errors':
-        errorspage_tables = ['jobattrsummary', 'errorsummary', 'siteerrorsummary', 'usererrorsummary',
-                            'taskerrorsummary']
-        preferences = {}
-        if 'jobattr' in request.session['requestParams']:
-            preferences["jobattr"] = request.session['requestParams']['jobattr'].split(",")
-            try:
-                del request.session['requestParams']['jobattr']
-            except:
-                pass
-        else:
-            preferences["jobattr"] = standard_errorfields
-        if 'tables' in request.session['requestParams']:
-            preferences['tables'] = request.session['requestParams']['tables'].split(",")
-            try:
-                del request.session['requestParams']['tables']
-            except:
-                pass
-        else:
-            preferences['tables'] = errorspage_tables
-        query = {}
-        query['page']= str(page)
-        if ('ADFS_LOGIN' in request.session):
-            userid = BPUser.objects.get(username=request.session['ADFS_LOGIN']).id
-            try:
-                userSetting = BPUserSettings.objects.get(page=page, userid=userid)
-                userSetting.preferences = json.dumps(preferences)
-                userSetting.save(update_fields=['preferences'])
-            except BPUserSettings.DoesNotExist:
-                userSetting = BPUserSettings(page=page, userid=userid, preferences=json.dumps(preferences))
-                userSetting.save()
 
 def dropRetrielsJobs(jobs, jeditaskid, isReturnDroppedPMerge):
     # dropping algorithm for jobs belong to single task
@@ -2209,9 +2173,9 @@ def getJobList(request,requesttoken=None):
                     'requestParams' in request.session and 'json' in request.session['requestParams']):
             values = [f.name for f in Jobsactive4._meta.get_fields()]
         elif eventservice:
-            values = 'jobsubstatus', 'produsername', 'cloud', 'computingsite', 'cpuconsumptiontime', 'jobstatus', 'transformation', 'prodsourcelabel', 'specialhandling', 'vo', 'modificationtime', 'pandaid', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'currentpriority', 'creationtime', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'homepackage', 'inputfileproject', 'inputfiletype', 'attemptnr', 'jobname', 'proddblock', 'destinationdblock', 'jobmetrics', 'reqid', 'minramcount', 'statechangetime', 'jobsubstatus', 'eventservice'
+            values = 'jobsubstatus', 'produsername', 'cloud', 'computingsite', 'cpuconsumptiontime', 'jobstatus', 'transformation', 'prodsourcelabel', 'specialhandling', 'vo', 'modificationtime', 'pandaid', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'currentpriority', 'creationtime', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'homepackage', 'inputfileproject', 'inputfiletype', 'attemptnr', 'jobname', 'proddblock', 'destinationdblock', 'jobmetrics', 'reqid', 'minramcount', 'statechangetime', 'jobsubstatus', 'eventservice','gshare'
         else:
-            values = 'jobsubstatus', 'produsername', 'cloud', 'computingsite', 'cpuconsumptiontime', 'jobstatus', 'transformation', 'prodsourcelabel', 'specialhandling', 'vo', 'modificationtime', 'pandaid', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'currentpriority', 'creationtime', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'homepackage', 'inputfileproject', 'inputfiletype', 'attemptnr', 'jobname', 'computingelement', 'proddblock', 'destinationdblock', 'reqid', 'minramcount', 'statechangetime', 'avgvmem', 'maxvmem', 'maxpss', 'maxrss', 'nucleus', 'eventservice'
+            values = 'jobsubstatus', 'produsername', 'cloud', 'computingsite', 'cpuconsumptiontime', 'jobstatus', 'transformation', 'prodsourcelabel', 'specialhandling', 'vo', 'modificationtime', 'pandaid', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'currentpriority', 'creationtime', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'homepackage', 'inputfileproject', 'inputfiletype', 'attemptnr', 'jobname', 'computingelement', 'proddblock', 'destinationdblock', 'reqid', 'minramcount', 'statechangetime', 'avgvmem', 'maxvmem', 'maxpss', 'maxrss', 'nucleus', 'eventservice','gshare'
 
         jobs.extend(Jobsdefined4.objects.filter(**newquery).values(*values))
         jobs.extend(Jobsactive4.objects.filter(**newquery).values(*values))
@@ -2549,9 +2513,9 @@ def jobList(request, mode=None, param=None):
         'json' in request.session['requestParams']):
         values = [f.name for f in Jobsactive4._meta.get_fields()]
     elif eventservice:
-        values = 'jobsubstatus', 'produsername', 'cloud', 'computingsite', 'cpuconsumptiontime', 'jobstatus', 'transformation', 'prodsourcelabel', 'specialhandling', 'vo', 'modificationtime', 'pandaid', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'currentpriority', 'creationtime', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'homepackage', 'inputfileproject', 'inputfiletype', 'attemptnr', 'jobname', 'proddblock', 'destinationdblock', 'jobmetrics', 'reqid', 'minramcount', 'statechangetime', 'jobsubstatus', 'eventservice' , 'nevents'
+        values = 'jobsubstatus', 'produsername', 'cloud', 'computingsite', 'cpuconsumptiontime', 'jobstatus', 'transformation', 'prodsourcelabel', 'specialhandling', 'vo', 'modificationtime', 'pandaid', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'currentpriority', 'creationtime', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'homepackage', 'inputfileproject', 'inputfiletype', 'attemptnr', 'jobname', 'proddblock', 'destinationdblock', 'jobmetrics', 'reqid', 'minramcount', 'statechangetime', 'jobsubstatus', 'eventservice' , 'nevents','gshare'
     else:
-        values = 'jobsubstatus', 'produsername', 'cloud', 'computingsite', 'cpuconsumptiontime', 'jobstatus', 'transformation', 'prodsourcelabel', 'specialhandling', 'vo', 'modificationtime', 'pandaid', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'currentpriority', 'creationtime', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'homepackage', 'inputfileproject', 'inputfiletype', 'attemptnr', 'jobname', 'computingelement', 'proddblock', 'destinationdblock', 'reqid', 'minramcount', 'statechangetime', 'avgvmem', 'maxvmem', 'maxpss', 'maxrss', 'nucleus', 'eventservice', 'nevents'
+        values = 'jobsubstatus', 'produsername', 'cloud', 'computingsite', 'cpuconsumptiontime', 'jobstatus', 'transformation', 'prodsourcelabel', 'specialhandling', 'vo', 'modificationtime', 'pandaid', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'currentpriority', 'creationtime', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'homepackage', 'inputfileproject', 'inputfiletype', 'attemptnr', 'jobname', 'computingelement', 'proddblock', 'destinationdblock', 'reqid', 'minramcount', 'statechangetime', 'avgvmem', 'maxvmem', 'maxpss', 'maxrss', 'nucleus', 'eventservice', 'nevents','gshare'
 
     JOB_LIMITS = request.session['JOB_LIMIT']
     totalJobs = 0
@@ -5043,10 +5007,15 @@ def dashSummary(request, hours, limit=999999, view='all', cloudview='region', no
         extra = "(not eventservice is null and eventservice=2 and not specialhandling like '%%sc:%%')"
 
     sitesummarydata = siteSummary(query, notime, extra)
+
     nojobabs = Sitedata.objects.filter(hours=3).values('site').annotate(dcount=Sum('nojobabs'))
+
     nojobabshash = {}
-    for item in nojobabs:
-        nojobabshash[item['site']] = item['dcount']
+    try:
+        for item in nojobabs:
+            nojobabshash[item['site']] = item['dcount']
+    except:
+        pass
 
 
     mismatchedSites = []
@@ -8345,8 +8314,9 @@ def errorSummaryDict(request, jobs, tasknamedict, testjobs):
     sumd = {}
     ## histogram of errors vs. time, for plotting
     errHist = {}
+    flist = ['cloud', 'computingsite', 'produsername', 'taskid', 'jeditaskid', 'processingtype', 'prodsourcelabel',
+             'transformation', 'workinggroup', 'specialhandling', 'jobstatus','gshare']
 
-    flist = standard_errorfields
     print len(jobs)
     for job in jobs:
         if not testjobs:
@@ -8615,7 +8585,6 @@ def digkey (rq):
     hashkey = hashlib.sha256(str(sk) + ' ' + qt)
     return hashkey.hexdigest()
 
-@csrf_exempt
 def errorSummary(request):
     valid, response = initRequest(request)
 
@@ -8628,20 +8597,10 @@ def errorSummary(request):
     if data is not None:
         data = json.loads(data)
         data['request'] = request
-        # Filtering data due to user settings
-        if request.session['ADFS_LOGIN'] and request.session['IS_TESTER']:
-            data = filterErrorData(request, data)
         response = render_to_response('errorSummary.html', data, content_type='text/html')
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes'] * 60)
         endSelfMonitor(request)
         return response
-
-    if 'jobattr' in request.session['requestParams'] or 'tables' in request.session['requestParams']:
-        saveUserSettings(request,'errors')
-        if request.GET:
-            addGetRequestParams(request)
-
-
 
     testjobs = False
     if 'prodsourcelabel' in request.session['requestParams'] and request.session['requestParams'][
@@ -8712,7 +8671,7 @@ def errorSummary(request):
 
     if not testjobs: query['jobstatus__in'] = ['failed', 'holding']
     jobs = []
-    values = 'eventservice', 'produsername', 'pandaid', 'cloud', 'computingsite', 'cpuconsumptiontime', 'jobstatus', 'transformation', 'prodsourcelabel', 'specialhandling', 'vo', 'modificationtime', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'currentpriority', 'computingelement'
+    values = 'eventservice', 'produsername', 'pandaid', 'cloud', 'computingsite', 'cpuconsumptiontime', 'jobstatus', 'transformation', 'prodsourcelabel', 'specialhandling', 'vo', 'modificationtime', 'atlasrelease', 'jobsetid', 'processingtype', 'workinggroup', 'jeditaskid', 'taskid', 'starttime', 'endtime', 'brokerageerrorcode', 'brokerageerrordiag', 'ddmerrorcode', 'ddmerrordiag', 'exeerrorcode', 'exeerrordiag', 'jobdispatchererrorcode', 'jobdispatchererrordiag', 'piloterrorcode', 'piloterrordiag', 'superrorcode', 'superrordiag', 'taskbuffererrorcode', 'taskbuffererrordiag', 'transexitcode', 'destinationse', 'currentpriority', 'computingelement','gshare'
     print "step3-1"
     print str(datetime.now())
 
@@ -8883,9 +8842,6 @@ def errorSummary(request):
         }
         data.update(getContextVariables(request))
         setCacheEntry(request, "errorSummary", json.dumps(data, cls=DateEncoder), 60 * 20)
-        # Filtering data due to user settings
-        if request.session['ADFS_LOGIN'] and request.session['IS_TESTER']:
-            data = filterErrorData(request, data)
         ##self monitor
         endSelfMonitor(request)
         response = render_to_response('errorSummary.html', data, content_type='text/html')
@@ -8900,80 +8856,6 @@ def errorSummary(request):
                          'produserid': job.produserid})
         return HttpResponse(json.dumps(resp), content_type='text/html')
 
-def filterErrorData(request, data):
-    defaultErrorsPreferences = {}
-    defaultErrorsPreferences['errors_standard_fields'] = standard_fields
-    defaultErrorsPreferences['tables'] = []
-    userid = BPUser.objects.get(username=request.session['ADFS_LOGIN']).id
-    try:
-        userSetting = BPUserSettings.objects.get(page='errors', userid=userid)
-        userPreferences = json.loads(userSetting.preferences)
-    except:
-        saveUserSettings(request, 'errors')
-        userSetting = BPUserSettings.objects.get(page='errors', userid=userid)
-        userPreferences = json.loads(userSetting.preferences)
-        # userPreferences = defaultErrorsPreferences
-
-    data['userPreferences'] = userPreferences
-    if 'tables' in userPreferences:
-        if 'jobattrsummary' in userPreferences['tables']:
-            if 'jobattr' in userPreferences:
-                sumd_new = []
-                for attr in userPreferences['jobattr']:
-                    for field in data['sumd']:
-                        if attr == field['field']:
-                            sumd_new.append(field)
-                            continue
-                data['sumd'] = sumd_new
-        if 'errorsummary' not in userPreferences['tables']:
-            try:
-                del data['errsByCount']
-            except:
-                pass
-        if 'siteerrorsummary' not in userPreferences['tables']:
-            try:
-                del data['errsBySite']
-            except:
-                pass
-        if 'usererrorsummary' not in userPreferences['tables']:
-            try:
-                del data['errsByUser']
-            except:
-                pass
-        if 'taskerrorsummary' not in userPreferences['tables']:
-            try:
-                del data['errsByTask']
-            except:
-                pass
-
-    return data
-
-def addGetRequestParams(request):
-    for p in request.GET:
-        pval = request.GET[p]
-        pval = pval.replace('+', ' ')
-        if p.lower() != 'batchid':  # Special requester exception
-            pval = pval.replace('#', '')
-        ## is it int, if it's supposed to be?
-        if p.lower() in (
-                'days', 'hours', 'limit', 'display_limit', 'taskid', 'jeditaskid', 'jobsetid', 'corecount',
-                'taskpriority',
-                'priority', 'attemptnr', 'statenotupdated', 'tasknotupdated', 'corepower', 'wansourcelimit',
-                'wansinklimit', 'nqueue', 'nodes', 'queuehours', 'memory', 'maxtime', 'space',
-                'maxinputsize', 'timefloor', 'depthboost', 'idlepilotsupression', 'pilotlimit',
-                'transferringlimit', 'cachedse', 'stageinretry', 'stageoutretry', 'maxwdir', 'minmemory',
-                'maxmemory', 'minrss',
-                'maxrss', 'mintime',):
-            try:
-                i = int(request.GET[p])
-            except:
-                data = {
-                    'viewParams': request.session['viewParams'],
-                    'requestParams': request.session['requestParams'],
-                    "errormessage": "Illegal value '%s' for %s" % (pval, p),
-                }
-                return False, render_to_response('errorPage.html', data, content_type='text/html')
-        request.session['requestParams'][p.lower()] = pval
 
 def removeParam(urlquery, parname, mode='complete'):
     """Remove a parameter from current query"""
