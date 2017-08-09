@@ -207,7 +207,7 @@ function killtasks(taskID, action) {
         $scope.eventsrows = [];
 
         $http({
-                 url: '{% url 'getbadeventsforfask' %}?jeditaskid={{ jeditaskid }}',
+                 url: '{% url 'getbadeventsforfask' %}?jeditaskid={{ jeditaskid }}&mode={{ requestParams.mode }}',
                  method: "GET",
             }).then(function successCallback(response) {
                     $scope.eventsrows = response.data;
