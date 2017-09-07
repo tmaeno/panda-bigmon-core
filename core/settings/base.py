@@ -208,4 +208,3 @@ EMAIL_SUBJECT_PREFIX = 'bigpandamon-core: '
 
 AUTH_USER_MODEL = 'common.BPUser'
 
-
