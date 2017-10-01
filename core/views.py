@@ -4393,11 +4393,9 @@ def userInfo(request, user=''):
     #
     # getting most relevant links based on visit statistics
     #
-
     links = {'task': [], 'job': [], 'other': []}
     if request.user.is_authenticated():
-        userids = BPUser.objects.filter(email=request.user.email).values('id')
-        userid = userids[0]['id']
+        userid = BPUser.objects.get(email=request.user.email).id
         sqlquerystr = """select pagegroup, pagename,visitrank, url
                           from (
                             select sum(w) as visitrank, pagegroup, pagename,row_number() over (partition by pagegroup ORDER BY sum(w) desc) as rn, url
@@ -11300,8 +11298,7 @@ def statpixel(request):
         service = 0
         userid = -1
         if request.user.is_authenticated():
-            userids = BPUser.objects.filter(email=request.user.email).values('id')
-            userid = userids[0]['id']
+            userid = request.user.id #BPUser.objects.get(email=request.user.email).id
         Visits.objects.create(url=url, service=service, remote=ip, time=str(timezone.now()), userid=userid)
 
     #user = BPUser.objects.create_user(username=request.session['ADFS_LOGIN'], email=request.session['ADFS_EMAIL'],
