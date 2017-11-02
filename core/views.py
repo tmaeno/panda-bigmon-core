@@ -4428,7 +4428,7 @@ def userInfo(request, user=''):
         userid = BPUser.objects.get(email=request.user.email).id
         sqlquerystr = """select pagegroup, pagename,visitrank, url
                           from (
-                            select sum(w) as visitrank, pagegroup, pagename, ORDER BY sum(w) desc) as rn, url
+                            select sum(w) as visitrank, pagegroup, pagename, row_number() over (partition by pagegroup ORDER BY sum(w) desc) as rn, url
                             from (
                               select exp(-(SYSdate - cast(time as date))*24/12) as w,
                               SUBSTR(url,
