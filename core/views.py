@@ -8649,6 +8649,7 @@ def harvesterWorkerInfo(request):
     valid, response = initRequest(request)
     harvesterid = None
     workerid = None
+    workerinfo = {}
 
     if 'harvesterid' in request.session['requestParams']:
         harvesterid = escapeInput(request.session['requestParams']['harvesterid'])
