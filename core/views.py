@@ -8781,6 +8781,7 @@ def harvesterWorkerInfo(request):
         error = "Harvesterid + Workerid is not specified"
 
     data = {
+        'request': request,
         'error': error,
         'workerinfo': workerinfo,
         'viewParams': request.session['viewParams'],
