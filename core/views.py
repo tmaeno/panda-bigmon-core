@@ -12503,7 +12503,7 @@ def tasksErrorsScattering(request):
     return response
 
 
-#@login_required
+@login_required
 def errorsScattering(request):
     initRequest(request)
     limit = 10000
@@ -12590,21 +12590,22 @@ def errorsScattering(request):
 
 
     data = {
+        'request': request,
         'clouds' : clouds,
-        # 'computingSites': computingSites,
         'reqerrors':reqerrors,
-        # 'tk': transactionKey,
     }
 
     response = render_to_response('errorsscatteringmatrix.html', data, content_type='text/html')
     patch_response_headers(response, cache_timeout=request.session['max_age_minutes'] * 60)
     return response
 
+
+@login_required
 def errorsScatteringDetailed(request, cloud, reqid):
     valid, response = initRequest(request)
     if not valid: return response
     grouping = []
-    clouds = list(set(homeCloud.values()))
+    clouds = sorted(list(set(homeCloud.values())))
     condition = '(1=1)'
     if cloud == '' or len(cloud)==0:
         return HttpResponse("No cloud supplied", content_type='text/html')
@@ -12806,6 +12807,7 @@ def errorsScatteringDetailed(request, cloud, reqid):
 
 
     data = {
+        'request': request,
         'cloud': cloud,
         'reqid': reqid,
         'grouping': grouping,
