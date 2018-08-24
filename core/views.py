@@ -10848,7 +10848,10 @@ def getErrorDescription(job, mode='html', provideProcessedCodes = False):
                 else:
                     return txt
             else:
-                return '-'
+                if provideProcessedCodes:
+                    return '-', '-'
+                else:
+                    return '-'
         else:
             meta = job['metastruct']
             if 'exitCode' in meta and meta['exitCode'] != 0:
