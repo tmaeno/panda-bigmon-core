@@ -11640,7 +11640,7 @@ def datasetList(request):
         endSelfMonitor(request)
         return HttpResponse(json.dumps(dsets), content_type='text/html')
 
-
+@login_customrequired
 def fileInfo(request):
     if dbaccess['default']['ENGINE'].find('oracle') >= 0:
         JediDatasetsTableName = "ATLAS_PANDA.JEDI_DATASETS"
@@ -11796,7 +11796,7 @@ def fileInfo(request):
         }
         return HttpResponse(json.dumps(data, cls=DateEncoder), content_type='text/html')
 
-
+@login_customrequired
 def fileList(request):
     valid, response = initRequest(request)
     if not valid: return response
@@ -11852,7 +11852,7 @@ def fileList(request):
         return HttpResponse(json.dumps(files), content_type='text/html')
 
 
-def loadFileList(request, datasetid = -1):
+def loadFileList(request, datasetid=-1):
     valid, response = initRequest(request)
     if not valid: return response
     setupView(request, hours=365 * 24, limit=999999999)
@@ -11904,8 +11904,8 @@ def loadFileList(request, datasetid = -1):
         f['creationdatecut'] = f['creationdate'].strftime('%Y-%m-%d')
         f['creationdate'] = f['creationdate'].strftime(defaultDatetimeFormat)
 
-    nfiles = len(filed)
-
+    ##self monitor
+    endSelfMonitor(request)
     dump = json.dumps(files, cls=DateEncoder)
     return HttpResponse(dump, content_type='text/html')
 
