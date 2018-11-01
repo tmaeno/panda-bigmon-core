@@ -8565,7 +8565,7 @@ def taskInfoNew(request, jeditaskid=0):
             builtDate = datetime.strptime('2018-'+data['built'], defaultDatetimeFormat)
             if builtDate < datetime.strptime('2018-02-27 12:00:00', defaultDatetimeFormat):
                 data = None
-                setCacheEntry(request, "taskInfo", json.dumps(data, cls=DateEncoder), 1)
+                setCacheEntry(request, "taskInfoNew", json.dumps(data, cls=DateEncoder), 1)
 
     if data is not None:
         doRefresh = False
@@ -8661,14 +8661,6 @@ def taskInfoNew(request, jeditaskid=0):
             print("Events states summary: {} sec".format(end - start))
 
     start = time.time()
-    # nonzeroPMERGE = 0
-    # for status in jobsummaryMerge:
-    #     if status['count'] > 0:
-    #         nonzeroPMERGE += 1
-    #         break
-    #
-    # if nonzeroPMERGE == 0:
-    #     jobsummaryMerge = None
 
     maxpssave = 0
     maxpsscount = 0
@@ -8836,14 +8828,6 @@ def taskInfoNew(request, jeditaskid=0):
         taskrec['pctfinished'] = (100 * taskrec['totevproc'] / taskrec['totev']) if (taskrec['totev'] > 0) else ''
         taskrec['totevhs06'] = (neventsTot) * taskrec['cputime'] if (
         taskrec['cputime'] is not None and neventsTot > 0) else None
-        # if taskrec['pctfinished']<=20 or hs06sSum['total']==0:
-        #     taskrec['totevhs06'] = (neventsTot)*taskrec['cputime'] if (taskrec['cputime'] is not None and neventsTot > 0) else None
-        # else:
-        #     taskrec['totevhs06'] = int(hs06sSum['total']*neventsTot)
-        # taskrec['totevprochs06'] = int(hs06sSum['finished'])
-        # taskrec['failedevprochs06'] = int(hs06sSum['failed'])
-        # taskrec['currenttotevhs06'] = int(hs06sSum['total'])
-
         taskrec['maxpssave'] = maxpssave
         if 'creationdate' in taskrec:
             taskrec['kibanatimefrom'] = taskrec['creationdate'].strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -8974,11 +8958,7 @@ def taskInfoNew(request, jeditaskid=0):
             'nomodeurl': nomodeurl,
             'mode': mode,
             'showtaskprof': showtaskprof,
-            # 'jobsummaryESMerge': jobsummaryMerge,
-            # 'jobsummaryPMERGE': jobsummaryMerge,
-            # 'plotsDict': json.dumps(plotsDict),
             'taskbrokerage': taskbrokerage,
-            # 'jobscoutids' : jobScoutIDs,
             'request': request,
             'viewParams': request.session['viewParams'],
             'requestParams': request.session['requestParams'],
@@ -9482,6 +9462,16 @@ def getJobSummaryForTask(request, jeditaskid=-1):
     plotsDict, jobsummary, jobsummaryMerge, jobScoutIDs = jobSummary3(
         request, query, extra=extra, isEventServiceFlag=es)
 
+
+    nonzeroMERGE = 0
+    for status in jobsummaryMerge:
+        if status['count'] > 0:
+            nonzeroMERGE += 1
+            break
+
+    if nonzeroMERGE == 0:
+        jobsummaryMerge = None
+
     alldata = {
         'jeditaskid': jeditaskid,
         'request': request,
@@ -9820,7 +9810,7 @@ def inputEventChunkSummary(taskrec, dsets):
     """
     jeditaskid = taskrec['jeditaskid']
     # Getting statuses of inputfiles
-    if taskrec['starttime'] < datetime.strptime('2018-10-22 10:00:00', defaultDatetimeFormat):
+    if taskrec['creationtime'] < datetime.strptime('2018-10-22 10:00:00', defaultDatetimeFormat):
         ifsquery = """
             select  
             ifs.jeditaskid,
