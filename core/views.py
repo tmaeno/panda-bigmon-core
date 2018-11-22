@@ -8693,6 +8693,8 @@ def taskInfoNew(request, jeditaskid=0):
     eventsChains = []
     currentlyRunningDataSets = []
     warning = {}
+    neventsProcTot = 0
+
 
     if 'jeditaskid' in request.session['requestParams']:
         jeditaskid = int(request.session['requestParams']['jeditaskid'])
@@ -8730,6 +8732,11 @@ def taskInfoNew(request, jeditaskid=0):
             eventsdict = eventSummary3(mode, query, transactionKeyDJ)
             end = time.time()
             print("Events states summary: {} sec".format(end - start))
+            for entry in eventsdict:
+                status = entry.get("statusname", "-")
+                if status in ['finished','done','merged']:
+                    neventsProcTot += entry.get("count", 0)
+
 
     start = time.time()
 
@@ -8827,6 +8834,7 @@ def taskInfoNew(request, jeditaskid=0):
     nfailed = 0
     neventsTot = 0
     neventsUsedTot = 0
+
     scope = ''
     newdslist = []
     if len(dsets) > 0:
@@ -8896,6 +8904,8 @@ def taskInfoNew(request, jeditaskid=0):
     if taskrec:
         taskrec['totev'] = neventsTot
         taskrec['totevproc'] = neventsUsedTot
+        taskrec['totevproc_evst'] = neventsProcTot
+        taskrec['pcttotevproc_evst'] = (100 * neventsProcTot / neventsTot) if (taskrec['totev'] > 0) else ''
         taskrec['pctfinished'] = (100 * taskrec['totevproc'] / taskrec['totev']) if (taskrec['totev'] > 0) else ''
         taskrec['totevhs06'] = (neventsTot) * taskrec['cputime'] if (
         taskrec['cputime'] is not None and neventsTot > 0) else None
