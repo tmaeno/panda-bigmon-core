@@ -6672,7 +6672,7 @@ def dashboard(request, view='production'):
     valid, response = initRequest(request)
     if not valid: return response
 
-    data = getCacheEntry(request, "dashboard")
+    data = getCacheEntry(request, "dashboard", skipCentralRefresh=True)
     if data is not None:
         data = json.loads(data)
         data['request'] = request
@@ -6883,7 +6883,7 @@ def dashboard(request, view='production'):
             ##self monitor
             endSelfMonitor(request)
             response = render_to_response('worldjobs.html', data, content_type='text/html')
-            setCacheEntry(request, "dashboard", json.dumps(data, cls=DateEncoder), 60 * 20)
+            setCacheEntry(request, "dashboard", json.dumps(data, cls=DateEncoder), 60 * 30)
             patch_response_headers(response, cache_timeout=request.session['max_age_minutes'] * 60)
             return response
         else:
@@ -7162,7 +7162,7 @@ def dashTasks(request, hours, view='production'):
         }
         ##self monitor
         endSelfMonitor(request)
-        setCacheEntry(request, "dashboard", json.dumps(data, cls=DateEncoder), 60 * 20)
+        setCacheEntry(request, "dashboard", json.dumps(data, cls=DateEncoder), 60 * 60)
         response = render_to_response('dashboard.html', data, content_type='text/html')
         patch_response_headers(response, cache_timeout=request.session['max_age_minutes'] * 60)
         return response
