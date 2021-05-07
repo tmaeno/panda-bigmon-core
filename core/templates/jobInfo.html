@@ -202,21 +202,6 @@ This is attempt number {{ job.attemptnr }} for this job. To see a history of job
                 {% endif %}
               {% endif %}
           {% else %}
-            {% if job.jobstatus == 'finished' or job.jobstatus == 'failed' %}
-                <a href="http://pandawms.org/pandajobslogstmp/core/data/jschovan/pandajobs/{{pandaid}}/logs/application_log.txt">Job stdout</a
-                <a href="http://pandawms.org/pandajobslogstmp/core/data/jschovan/pandajobs/{{pandaid}}/output/">Job outputs</a>
-                <script>
-                   logLinksArray[logLinksArray.length] = "http://pandawms.org/pandajobslogstmp/core/data/jschovan/pandajobs/{{pandaid}}/logs/application_log.txt"
-                   logLinksArray[logLinksArray.length] = "http://pandawms.org/pandajobslogstmp/core/data/jschovan/pandajobs/{{pandaid}}/output/"
-               </script>
-
-            {% endif %}
-            <a href="http://pandawms.org/pandajobslogstmp/core/data/jschovan/pandajobs/{{pandaid}}/logs/athena_stdout.txt">Payload stdout</a>
-            <a href='http://pilots1.pandawms.org/pandawms-jobcache/jobcache-{{job.pandaid}}.tar.gz'>Job cache tarball</a>
-            <script>
-              logLinksArray[logLinksArray.length] = "http://pandawms.org/pandajobslogstmp/core/data/jschovan/pandajobs/{{pandaid}}/logs/athena_stdout.txt"
-              logLinksArray[logLinksArray.length] ='http://pilots1.pandawms.org/pandawms-jobcache/jobcache-{{job.pandaid}}.tar.gz'
-            </script>
           {% endif %}
         {% else %}
             <a>No logs available</a>
@@ -225,7 +210,7 @@ This is attempt number {{ job.attemptnr }} for this job. To see a history of job
             {% if stdout %}
                 <a href='{{stdout}}'>Pilot job stdout</a>
                 <a href='{{stderr}}'>Pilot job stderr</a>
-                <a href='{{stdlog}}'>Batch log of pilot job</a>
+                <a href='{{stdlog}}'>job stdout</a>
                 <a href='{{stdjdl}}'>Pilot job jdl</a>
               <script>
               logLinksArray[logLinksArray.length] ='{{stdout}}'

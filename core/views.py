@@ -4524,9 +4524,15 @@ def jobInfo(request, pandaid=None, batchid=None, p2=None, p3=None, p4=None):
 
     if 'pilotid' in job and job['pilotid'] and job['pilotid'].startswith('http') and '{' not in job['pilotid']:
         stdout = job['pilotid'].split('|')[0]
-        stderr = stdout.replace('.out', '.err')
-        stdlog = stdout.replace('.out', '.log')
-        stdjdl = stdout.replace('.out', '.jdl')
+        if stdout.endswith('pilotlog.txt'):
+           stdlog = stdout.replace('pilotlog.txt', 'payload.stdout')
+           stderr = stdout.replace('pilotlog.txt', 'payload.stderr')
+           stdjdl = None
+        else:
+            stderr = stdout.replace('.out', '.err')
+            stdlog = stdout.replace('.out', '.log')
+            stdjdl = stdout.replace('.out', '.jdl')
+            stdlog = stdout.replace('.out', '.log')
     elif len(harvesterInfo) > 0 and 'batchlog' in harvesterInfo[0]:
         stdlog = harvesterInfo[0]['batchlog']
         stderr = stdlog.replace('.log', '.err')
