@@ -62,7 +62,9 @@ class RequestStatus(Enum):
     Suspended = 12
     ToResume = 13
     Resuming = 14
-    Expired = 15
+    ToExpire = 15
+    Expiring = 16
+    Expired = 17
 
 
 class RequestLocking(Enum):
@@ -71,16 +73,24 @@ class RequestLocking(Enum):
 
 
 class RequestType(Enum):
-    Derivation = 0
+    Workflow = 0
     EventStreaming = 1
     StageIn = 2
+    ActiveLearning = 3
+    HyperParameterOpt = 4
+    Derivation = 5
     Other = 99
 
 
 class TransformType(Enum):
-    Derivation = 0
+    Workflow = 0
     EventStreaming = 1
     StageIn = 2
+    ActiveLearning = 3
+    HyperParameterOpt = 4
+    Derivation = 5
+    Processing = 6
+    Actuating = 7
     Other = 99
 
 
@@ -95,6 +105,14 @@ class TransformStatus(Enum):
     ToCancel = 7
     Cancelling = 8
     Cancelled = 9
+    ToSuspend = 10
+    Suspending = 11
+    Suspended = 12
+    ToResume = 13
+    Resuming = 14
+    ToExpire = 15
+    Expiring = 16
+    Expired = 17
 
 
 class TransformLocking(Enum):
@@ -106,6 +124,7 @@ class CollectionType(Enum):
     Container = 0
     Dataset = 1
     File = 2
+    PseudoDataset = 3
 
 
 class CollectionRelationType(Enum):
@@ -123,6 +142,8 @@ class CollectionStatus(Enum):
     SubClosed = 5
     Failed = 6
     Deleted = 7
+    Cancelled = 8
+    Suspended = 9
 
 
 class CollectionLocking(Enum):
@@ -133,6 +154,7 @@ class CollectionLocking(Enum):
 class ContentType(Enum):
     File = 0
     Event = 1
+    PseudoContent = 2
 
 
 class ContentStatus(Enum):
@@ -162,8 +184,8 @@ class ProcessingStatus(Enum):
     Cancel = 7
     FinishedOnStep = 8
     FinishedOnExec = 9
-    TimeOut = 10
-    FinishedTerm = 11
+    FinishedTerm = 10
+    SubFinished = 11
     ToCancel = 12
     Cancelling = 13
     Cancelled = 14
@@ -172,8 +194,10 @@ class ProcessingStatus(Enum):
     Suspended = 17
     ToResume = 18
     Resuming = 19
-    Expired = 20
-    SubFinished = 21
+    ToExpire = 20
+    Expiring = 21
+    Expired = 22
+    TimeOut = 23
 
 
 class ProcessingLocking(Enum):
@@ -184,6 +208,20 @@ class ProcessingLocking(Enum):
 class MessageType(Enum):
     StageInFile = 0
     StageInCollection = 1
+    StageInWork = 2
+    ActiveLearningFile = 3
+    ActiveLearningCollection = 4
+    ActiveLearningWork = 5
+    HyperParameterOptFile = 6
+    HyperParameterOptCollection = 7
+    HyperParameterOptWork = 8
+    ProcessingFile = 9
+    ProcessingCollection = 10
+    ProcessingWork = 11
+    HealthHeartbeat = 12
+    UnknownFile = 97
+    UnknownCollection = 98
+    UnknownWork = 99
 
 
 class MessageStatus(Enum):
