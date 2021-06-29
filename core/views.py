@@ -9030,7 +9030,7 @@ def taskInfo(request, jeditaskid=0):
             'warning': warning,
         }
         data.update(getContextVariables(request))
-        cacheexpiration = 60*20 #second/minute * minutes
+        cacheexpiration = 60*1 #second/minute * minutes
         if taskrec and 'status' in taskrec:
             totaljobs = 0
             for state in jobsummary:
