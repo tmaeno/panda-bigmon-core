@@ -114,7 +114,7 @@ var requests_table = $('#requests_table').DataTable({
                 return retVal;
             }
         },
-        { data: "created_at", title: "created at" },
+        { data: "created_at", title: "created on (UTC)" },
         { data: "total_tasks", title: "total tasks" },
         { data: "tasks_links", title: "tasks",
            render: function(data, type, row, meta) {

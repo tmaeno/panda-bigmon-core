@@ -38,7 +38,7 @@ def get_workflow_progress_data(request):
     workflows = {}
     for workflow_group in workflows_semi_grouped:
         workflow = workflows.setdefault(workflow_group[0], {
-            "REQUEST_ID":workflow_group[0], "R_STATUS": subtitleValue.substitleValue("requests", "status")[workflow_group[1]], "CREATED_AT":workflow_group[7],"TOTAL_TASKS":0,
+            "REQUEST_ID":workflow_group[0], "R_STATUS": subtitleValue.substitleValue("requests", "status")[workflow_group[1]], "CREATED_AT":workflow_group[8],"TOTAL_TASKS":0,
             "TASKS_STATUSES":{}, "TASKS_LINKS":{}, "REMAINING_FILES":0,"PROCESSED_FILES":0,"PROCESSING_FILES":0,
             "TOTAL_FILES":0})
         workflow['TOTAL_TASKS'] += workflow_group[7]

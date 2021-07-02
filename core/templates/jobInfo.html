@@ -208,8 +208,8 @@ This is attempt number {{ job.attemptnr }} for this job. To see a history of job
         {% endif %}
         {% if job.jobstatus == 'holding' or job.jobstatus == 'finished' or job.jobstatus == 'failed' or job.jobstatus == 'merging'  or job.jobstatus == 'transferring' %}
             {% if stdout %}
-                <a href='{{stdout}}'>Pilot job stdout</a>
-                <a href='{{stderr}}'>Pilot job stderr</a>
+                <a href='{{stdout}}'>Pilot stdout</a>
+                <a href='{{stderr}}'>Job stderr</a>
                 <a href='{{stdlog}}'>job stdout</a>
                 <a href='{{stdjdl}}'>Pilot job jdl</a>
               <script>
