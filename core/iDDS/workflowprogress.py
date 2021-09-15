@@ -60,6 +60,10 @@ def wfprogress(request):
     initRequest(request)
     query_params = parse_request(request)
     iDDSrequests = get_workflow_progress_data(None)
+    if (('HTTP_ACCEPT' in request.META) and (request.META.get('HTTP_ACCEPT') in ('text/json', 'application/json'))) or (
+        'json' in request.session['requestParams']):
+        return JsonResponse(iDDSrequests, encoder=DateEncoder, safe=False)
+
     data = {
         'iDDSrequests':iDDSrequests,
         'request': request,
