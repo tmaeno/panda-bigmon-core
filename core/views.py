@@ -63,6 +63,7 @@ from core.common.models import BPUser, Visits, BPUserSettings, AllRequests
 from core.compare.modelsCompare import ObjectsComparison
 from core.art.modelsART import ARTTests
 from core.filebrowser.ruciowrapper import ruciowrapper
+from core.schedresource.utils import get_panda_queues
 
 from core.settings.local import dbaccess
 from core.settings.local import PRODSYS
@@ -326,13 +327,14 @@ def setupSiteInfo(request):
     if len(homeCloud) > 0 and callCount % 100 != 1 and 'refresh' not in request.session['requestParams']: return
     sflist = ('siteid', 'site', 'status', 'cloud', 'tier', 'comment_field', 'objectstore', 'catchall', 'corepower')
     sites = Schedconfig.objects.filter().exclude(cloud='CMS').values(*sflist)
-    for site in sites:
+    sites_cric = get_panda_queues()
+    for site_name, site in sites_cric.items():
         pandaSites[site['siteid']] = {}
-        for f in ('siteid', 'status', 'tier', 'site', 'comment_field', 'cloud', 'corepower'):
+        for f in ('siteid', 'status', 'tier', 'site', 'cloud', 'corepower'):
             pandaSites[site['siteid']][f] = site[f]
         homeCloud[site['siteid']] = site['cloud']
         if (site['catchall'] != None) and (
-                        site['catchall'].find('log_to_objectstore') >= 0 or site['objectstore'] != ''):
+                        site['catchall'].find('log_to_objectstore') >= 0 or site.get('objectstore') != ''):
             # print 'object store site', site['siteid'], site['catchall'], site['objectstore']
             try:
                 fpath = getFilePathForObjectStore(site['objectstore'], filetype="logs")
@@ -8887,6 +8889,11 @@ def taskInfo(request, jeditaskid=0):
         taskrec['totevprochs06'] = int(hs06sSum['finished'])
         taskrec['failedevprochs06'] = int(hs06sSum['failed'])
         taskrec['currenttotevhs06'] = int(hs06sSum['total'])
+        taskrec[''] = int(hs06sSum.get('finished_requested', 0))
+        taskrec['totevprochs06_requested'] = int(hs06sSum.get('finished_requested', 0))
+        taskrec['failedevprochs06_requested'] = int(hs06sSum.get('failed_requested', 0))
+        taskrec['currenttotevhs06_requested'] = int(hs06sSum.get('total_requested', 0))
+
 
         taskrec['maxpssave'] = maxpssave
         if 'creationdate' in taskrec:
@@ -9713,7 +9720,8 @@ def jobSummary2(request, query, exclude={}, extra = "(1=1)", mode='drop', isEven
     jobsSet = {}
     newjobs = []
 
-    hs06sSum = {'finished': 0, 'failed': 0, 'total': 0}
+    hs06sSum = {'finished': 0, 'failed': 0, 'total': 0, 'finished_requested': 0,
+                'failed_requested': 0, 'total_requested': 0}
     cpuTimeCurrent = []
     for job in jobs:
 
@@ -9751,6 +9759,7 @@ def jobSummary2(request, query, exclude={}, extra = "(1=1)", mode='drop', isEven
                 if job['computingsite'] in pandaSites and pandaSites[job['computingsite']]['corepower']:
                     job['hs06sec'] = (job['duration']) * float(pandaSites[job['computingsite']]['corepower']) * job[
                     'actualcorecount']
+                    job['hs06sec_requested'] = (job['duration']) * float(pandaSites[job['computingsite']]['corepower']) * job.get('corecount', 1)
                 else:
                     job['hs06sec'] = 0
             if job['nevents'] and job['nevents'] > 0:
@@ -9760,7 +9769,9 @@ def jobSummary2(request, query, exclude={}, extra = "(1=1)", mode='drop', isEven
                 hs06sSum['finished'] += job['hs06sec'] if job['jobstatus'] == 'finished' else 0
                 hs06sSum['failed'] += job['hs06sec'] if job['jobstatus'] == 'failed' else 0
                 hs06sSum['total'] += job['hs06sec']
-
+                hs06sSum['finished_requested'] += job['hs06sec_requested'] if job['jobstatus'] == 'finished' else 0
+                hs06sSum['failed_requested'] += job['hs06sec_requested'] if job['jobstatus'] == 'failed' else 0
+                hs06sSum['total_requested'] += job['hs06sec_requested']
     jobs = newjobs
 
     if mode == 'drop' and len(jobs) < 400000:
