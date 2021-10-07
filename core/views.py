@@ -9755,7 +9755,7 @@ def jobSummary2(request, query, exclude={}, extra = "(1=1)", mode='drop', isEven
             'starttime'] and job['endtime']:
             duration = max(job['endtime'] - job['starttime'], timedelta(seconds=0))
             job['duration'] = duration.days * 24 * 3600 + duration.seconds
-            if job['hs06sec'] is None:
+            if job['hs06sec'] is None or job['hs06sec']==0:
                 if job['computingsite'] in pandaSites and pandaSites[job['computingsite']]['corepower']:
                     job['hs06sec'] = (job['duration']) * float(pandaSites[job['computingsite']]['corepower']) * job[
                     'actualcorecount']
