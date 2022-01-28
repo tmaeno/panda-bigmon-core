@@ -25,7 +25,7 @@ from elasticsearch_dsl import Search
 from core.settings.local import defaultDatetimeFormat
 from core.settings.config import DB_SCHEMA, DB_SCHEMA_PANDA_ARCH, DEPLOYMENT
 
-from core.libs.taskflow import RSEtoInpDat, InpDattoSITE, SITEtoJOB, frec, concat
+from core.libs.taskflow import RSEtoInpDat, InpDattoSITE, SITEtoJOB, frec, executeTF, concat_all, concat_NoRep
 
 
 
@@ -1448,5 +1448,7 @@ def get_task_flow_data(jeditaskid):
     # TODO ...
 
     #concat(dataset_dict)
+ #   print({'data': {'datasets': dataset_dict, } })
 
-    return concat({'data': {'datasets': dataset_dict, } })
+    return executeTF({'data': {'datasets': dataset_dict, } })
+
